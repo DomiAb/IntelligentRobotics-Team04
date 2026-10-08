@@ -10,7 +10,7 @@ Quantity & quality of work done: Dominik 3, Remi 3, Paul 4
 Overall contribution to the team: Dominik 3, Remi 3, Paul 3  
 
 ## Detailed description
-Dominik: Searched for 2 Papers, presented them to the team, voted on the final paper, set up the repository  
-Remi: Searched for 2 Papers, presented them to the team, voted on the final paper, set up the communication  
-Paul: Searched for 2 Papers, presented them to the team, voted on the final paper, proposed it to the TA  
+Dominik: Searched for 2 Papers, presented them to the team, voted on the final paper, set up the git repository and included thre exisitng code from the choosen paper
+Remi: Researched 2 Papers, presented them to the team, voted on the final paper, set up the communication between the team members
+Paul: Searched for 2 possible Papers, presented them to the team, voted on the final paper, proposed it to the TA   
 
