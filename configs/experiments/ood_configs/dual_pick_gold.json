@@ -1,0 +1,7 @@
+{
+    "env_setup": {},
+    "use_neg": false,
+    "pos_examples": "dataset/dual_square/gold_nut_on_peg.hdf5",
+    "neg_examples": "dataset/dual_square/red_nut_on_peg.hdf5",
+    "reset_poses": "dataset/dual_square/initial_states.json"
+}

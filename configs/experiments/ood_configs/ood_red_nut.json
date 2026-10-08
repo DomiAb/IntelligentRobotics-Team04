@@ -1,0 +1,7 @@
+{
+    "env_setup": {},
+    "use_neg": false,
+    "pos_examples": "dataset/ood_red_nut/red_nut_pos_examples.hdf5",
+    "neg_examples": "dataset/ood_red_nut/red_nut_neg_examples.hdf5",
+    "reset_poses": "dataset/ood_red_nut/initial_states.json"
+}

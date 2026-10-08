@@ -1,0 +1,7 @@
+{ 
+    "env_setup": {},
+    "use_neg": false, 
+    "pos_examples": "dataset/square_splits/square_pos_examples.hdf5", 
+    "neg_examples": "dataset/square_splits/square_bad_insertions.hdf5",
+    "reset_poses": "dataset/square_reset_positions_val.json"
+}  

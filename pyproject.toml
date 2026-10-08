@@ -1,0 +1,7 @@
+[project]
+name = "ss26_g2_smlr"
+version = "0.1.0"
+
+[tool.setuptools]
+packages = ["core"] 
+# You can add other code directories if needed, e.g., ["core", "mimicgen", "robosuite"]
