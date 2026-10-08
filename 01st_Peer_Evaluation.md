@@ -11,6 +11,6 @@ Overall contribution to the team: Dominik 3, Remi 3, Paul 3
 
 ## Detailed description
 Dominik: Searched for 2 Papers, presented them to the team, voted on the final paper, set up the git repository, and included three existing codes from the chosen paper  
-Remi: Researched 2 Papers, presented them to the team, voted on the final paper, and set up communication between the team members  
-Paul: Searched for 2 possible Papers, presented them to the team, voted on the final paper, proposed it to the TA, initiated the first meeting   
+Remi: Researched 2 Papers, presented them to the team, voted on the final paper, set up communication between the team members, and initiated the first meeting   
+Paul: Searched for 2 possible Papers, presented them to the team, voted on the final paper, proposed it to the TA, and set up a shared powerpoint presentation
 
