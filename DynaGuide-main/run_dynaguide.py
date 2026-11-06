@@ -10,8 +10,10 @@ import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
 import math
+import re
+from datetime import datetime
 
-import shutil 
+import shutil
 import torchvision 
 import torch
 import pickle 
@@ -45,7 +47,40 @@ THIS CODE ADAPTED FROM ROBOMIMIC POLICY ROLLOUT CODE
 """
 
 
-MAIN_CAMERA = "third_person" 
+MAIN_CAMERA = "third_person"
+
+# what a run writes into its output folder, which an earlier run must not have there already
+OUTPUT_FILES = re.compile(r"args\.json|\d+_\d+\.png|.*\.(mp4|hdf5)|.*_log\.json")
+
+
+def prepare_output_folder(args):
+    """Everything of a run goes into output_folder, named by date and time. Stops instead of overwriting an earlier run."""
+    os.makedirs(args.output_folder, exist_ok=True)
+    existing = [os.path.join(args.output_folder, f) for f in sorted(os.listdir(args.output_folder)) if OUTPUT_FILES.fullmatch(f)]
+    existing += [path for path in [args.video_path, args.dataset_path, args.json_path] if path is not None and os.path.exists(path)]
+    if len(existing) > 0:
+        sys.exit(f"Output folder {args.output_folder} already has results, choose a new folder so they aren't overwritten: {existing}")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    args.video_path = args.video_path or os.path.join(args.output_folder, f"{timestamp}_video.mp4")
+    args.dataset_path = args.dataset_path or os.path.join(args.output_folder, f"{timestamp}_rollout.hdf5")
+    args.json_path = args.json_path or os.path.join(args.output_folder, f"{timestamp}_log.json")
+    args.dataset_obs = True # the success evaluation needs them
+    for path in [args.video_path, args.dataset_path, args.json_path]:
+        if os.path.dirname(path) != "":
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+
+def render_video_frame(env, camera_names, collage):
+    video_img = []
+    for cam_name in camera_names:
+        img = env.render(mode="rgb_array", height=128 * 5, width=128 * 5, camera_name=cam_name)
+        video_img.append(img)
+    video_img = np.concatenate(video_img, axis=0) # concatenate horizontally
+    video_img = cv2.resize(video_img, (128 * 5, 128 * 5))
+    if collage is not None:
+        video_img = np.concatenate((collage, video_img), axis = 0)
+    return video_img
 
 def get_img_from_fig(fig, dpi=80):
     buf = io.BytesIO()
@@ -114,7 +149,7 @@ def visualize_guidance_process(model, actions_list, obs, target_embeddings, alph
 
 def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=False, camera_names=None,
             classifier_grad = None, reset_state = None, model = None, exp_dir = None, rollout_count = None, good_embeddings = None, bad_embeddings = None,
-            setup_config = None, save_frames = False, goal_dir = None, ss = 4, alpha = 20, initial_positions = None):
+            setup_config = None, save_frames = False, goal_dir = None, ss = 4, alpha = 20, initial_positions = None, no_collage = False):
     """
     This is the main function that runs DynaGuide. Notable arguments:
     - classifier_grad: the dynaguide function returned by calculate_classifier_guidance 
@@ -126,7 +161,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     - ss: number of times to run stochastic sampling 
     - alpha: how much to divide the l2 distance, corresponding to sigma in the paper 
     - initial_positions: a list of initial robot configurations for resetting 
-    - goal_dir: place to retrieve goal images; if none, we are not goal conditioning 
+    - goal_dir: place to retrieve goal images; if none, we are not goal conditioning
+    - no_collage: leave the dynamics model reconstructions out of the video, which skips their forward passes
     """
     rollout_timestamp = time.time()
     assert isinstance(env, EnvBase) or isinstance(env, EnvWrapper)
@@ -160,6 +196,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     got_exception = False
     success = env.is_success()["task"]
     traj = dict(actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict)
+    time_policy, time_env, time_collage, time_video = 0., 0., 0., 0. # seconds per part of the rollout, for the results json
+    collage = None
     goal_tracker = make_tracker(setup_config, articulated_binaries) # decides when the rollout ends, depending on the experiment config
     if return_obs:
         # store observations too
@@ -174,8 +212,10 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                 act = policy(ob=obs, guidance_function = classifier_grad, guidance_type = "diffusion", ss = ss) # this is where the guidance happens 
 
             t2 = time.time()
+            time_policy += t2 - t1
 
             next_obs, r, done, _ = env.step(act)
+            time_env += time.time() - t2
 
             # compute reward
             total_reward += r
@@ -185,19 +225,18 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                 denoising_list = policy.policy.corrections_list 
                 guidance_list = policy.policy.guidance_list
                 print("Guidance norms: ", [np.linalg.norm(guidance.detach().cpu().numpy()).item() for guidance in guidance_list])
-                target_embeddings = bad_embeddings if good_embeddings is None else good_embeddings
-                collage = visualize_guidance_process(model, denoising_list, obs, target_embeddings, alpha = alpha)
+                if not no_collage:
+                    t3 = time.time()
+                    target_embeddings = bad_embeddings if good_embeddings is None else good_embeddings
+                    collage = visualize_guidance_process(model, denoising_list, obs, target_embeddings, alpha = alpha)
+                    time_collage += time.time() - t3
          
             if video_writer is not None:
                 if video_count % video_skip == 0:
-                    video_img = []
-                    for cam_name in camera_names:
-                        img = env.render(mode="rgb_array", height=128 * 5, width=128 * 5, camera_name=cam_name)
-                        video_img.append(img)
-                    video_img = np.concatenate(video_img, axis=0) # concatenate horizontally
-                    video_img = cv2.resize(video_img, (128 * 5, 128 * 5))
-                    video_img = np.concatenate((collage, video_img), axis = 0)
+                    t3 = time.time()
+                    video_img = render_video_frame(env, camera_names, collage)
                     video_writer.append_data(video_img)
+                    time_video += time.time() - t3
                 if step_i % 14 == 0 and save_frames:
                     print("SAVING!!")
                     plt.imsave(exp_dir + f"/{rollout_count}_{step_i}.png", video_img.astype(np.uint8))
@@ -229,15 +268,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
 
             # break if done or if success
             if done or success:
-                # always capture the last frame 
-                video_img = []
-                for cam_name in camera_names:
-                    img = env.render(mode="rgb_array", height=128 * 5, width=128 * 5, camera_name=cam_name)
-                    video_img.append(img)
-                video_img = np.concatenate(video_img, axis=0) # concatenate horizontally
-                video_img = cv2.resize(video_img, (128 * 5, 128 * 5))
-                video_img = np.concatenate((collage, video_img), axis = 0)
-                video_writer.append_data(video_img)
+                # always capture the last frame
+                video_writer.append_data(render_video_frame(env, camera_names, collage))
                 break
 
             # update for next iter
@@ -254,6 +286,10 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
         Success_Rate=float(success),
         Exception_Rate=float(got_exception),
         time=(time.time() - rollout_timestamp),
+        Time_Policy=time_policy,
+        Time_Env=time_env,
+        Time_Collage=time_collage,
+        Time_Video=time_video,
     )
 
     if return_obs:
@@ -281,11 +317,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
 def run_trained_agent(args):
     states_list, actions_list, labels_list = list(), list(), list()
 
-    if args.output_folder is not None:
-        os.makedirs(args.output_folder, exist_ok=True)
-    for path in [args.video_path, args.dataset_path, args.json_path]:
-        if path is not None and os.path.dirname(path) != "":
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+    prepare_output_folder(args)
 
     # some arg checking
     write_video = (args.video_path is not None)
@@ -360,9 +392,6 @@ def run_trained_agent(args):
         rollout_horizon = config.experiment.rollout.horizon
 
 
-    if args.no_window:
-        os.environ["CALVIN_NO_WINDOW"] = "1"
-
     env, _ = FileUtils.env_from_checkpoint(
         ckpt_dict=ckpt_dict,
         env_name=args.env,
@@ -370,6 +399,9 @@ def run_trained_agent(args):
         render_offscreen=(args.video_path is not None), 
         verbose=True,
     )
+
+    if args.no_live_render:
+        env.env.unwrapped.disable_live_render()
 
     universal_state = env.get_state() if args.same_env else None
 
@@ -382,6 +414,7 @@ def run_trained_agent(args):
 
     # maybe set seed
     if args.seed is not None:
+        random.seed(args.seed) # picks the robot start pose and the random parts of the reset
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
@@ -424,7 +457,8 @@ def run_trained_agent(args):
                 save_frames = args.save_frames,
                 goal_dir = args.goal_dir,
                 ss = args.ss,
-                initial_positions = robot_initial_positions
+                initial_positions = robot_initial_positions,
+                no_collage = args.no_collage
             )
         except KeyboardInterrupt:
             sys.exit(0)
@@ -536,9 +570,15 @@ if __name__ == "__main__":
 
     # Whether to render rollouts to screen
     parser.add_argument(
-        "--no_window",
+        "--no_live_render",
         action='store_true',
-        help="(optional) don't open the PyBullet window. The images and the video stay the same",
+        help="(optional) stop redrawing the PyBullet window to save time. The saved video and the images of the policy stay the same",
+    )
+
+    parser.add_argument(
+        "--no_collage",
+        action='store_true',
+        help="(optional) leave the dynamics model reconstructions out of the video and the frames to save time",
     )
 
     parser.add_argument(
@@ -652,8 +692,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output_folder",
         type=str,
-        default=None,
-        help="(optional) dump a json of the rollout results stats to the specified path",
+        required=True,
+        help="folder for everything this run saves: video, rollouts, results json and frames. It must not hold an earlier run",
     )
 
 

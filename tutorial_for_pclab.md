@@ -42,6 +42,18 @@ If winget says the build tools are already installed, the C++ part is missing. O
 
 If winget does not exist on the PC, download the Build Tools from https://visualstudio.microsoft.com/visual-cpp-build-tools/ and tick the same option.
 
+### Speed up a PC that already has the env
+
+Do this once. `setup_dynaguide.bat` does the same on a new PC. pip builds pybullet without numpy, which makes the cameras slower, and this rebuilds it with numpy. The physics code doesn't change:
+
+```bat
+conda activate dynaguide
+pip install --force-reinstall --no-deps --no-cache-dir --no-build-isolation pybullet==3.2.7
+python -c "import pybullet; print('numpy enabled:', pybullet.isNumpyEnabled())"
+```
+
+The last line must print `numpy enabled: 1`. If the rebuild fails, your old pybullet stays installed and everything still works, only slower.
+
 # Recurrent user
 Opn anaconda promt, go to DynaGuide repo nand activate the conda env. Installed packages should still be there!
 

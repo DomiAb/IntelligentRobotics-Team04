@@ -146,14 +146,14 @@ class PlayTableSimEnv(gym.Env):
                     sys.exit(1)
                 self.p.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
             # the EGL plugin only exists on Linux, and use_egl=true is baked into the checkpoints. Without EGL, getCameraImage
-            # defaults to the CPU TinyRenderer in both GUI and DIRECT, so CALVIN_NO_WINDOW drops the window without changing the images.
-            elif (self.show_gui or (self.use_egl and sys.platform != "linux")) and os.environ.get("CALVIN_NO_WINDOW") != "1":
+            # still defaults to the CPU TinyRenderer through the GUI client, the window only shows the scene.
+            elif self.show_gui or (self.use_egl and sys.platform != "linux"):
                 self.p = bc.BulletClient(connection_mode=p.GUI)
                 cid = self.p._client
                 if cid < 0:
                     log.error("Failed to connect to GUI.")
-            elif self.use_egl and sys.platform == "linux":
-                options = f"--width={render_width} --height={render_height}"
+            elif self.use_egl:
+                options =f"--width={render_width} --height={render_height}"
                 self.p = p
                 cid = self.p.connect(p.DIRECT, options=options)
                 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0, physicsClientId=cid)
@@ -208,16 +208,16 @@ class PlayTableSimEnv(gym.Env):
         else:
             print("does not own physics client id")
 
+    def disable_live_render(self):
+        """Stops redrawing the PyBullet window. The camera images don't come from the window, and Linux has none with EGL."""
+        if sys.platform != "linux":
+            self.p.configureDebugVisualizer(self.p.COV_ENABLE_RENDERING, 0)
+
     def render(self, mode="human", height = 200, width = 200):
         """render is gym compatibility function"""
-        rgb_obs = {}
-        depth_obs = {}
-        
-        for cam in self.cameras:
-            rgb, depth = cam.render(width, height)
-            rgb_obs[f"rgb_{cam.name}"] = rgb
-            depth_obs[f"depth_{cam.name}"] = depth
-        return rgb_obs["rgb_static"]
+        # only the static image is returned, so don't spend time on the other cameras
+        static_camera = next(cam for cam in self.cameras if cam.name == "static")
+        return static_camera.render(width, height)[0]
 
 
         rgb_obs, depth_obs = self.get_camera_obs()

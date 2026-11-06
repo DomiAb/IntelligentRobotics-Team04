@@ -45,6 +45,14 @@ if errorlevel 1 goto failed
 call conda run -n %ENV_NAME% python -m pip install -e ./DynaGuide-main/calvin/calvin_env
 if errorlevel 1 goto failed
 
+rem pip builds pybullet without numpy, which makes getCameraImage slower. The physics code is the same.
+call conda run -n %ENV_NAME% python -c "import sys, pybullet; sys.exit(0 if pybullet.isNumpyEnabled() else 1)"
+if not errorlevel 1 goto pybullet_ready
+echo Rebuilding pybullet with numpy, this can take a while...
+call conda run --no-capture-output -n %ENV_NAME% python -m pip install --force-reinstall --no-deps --no-cache-dir --no-build-isolation pybullet==3.2.7
+if errorlevel 1 echo WARNING: pybullet could not be rebuilt with numpy. DynaGuide still works, only slower.
+
+:pybullet_ready
 if not exist "DynaGuide-main\results" mkdir "DynaGuide-main\results"
 
 call conda run -n %ENV_NAME% python -c "import torch, pybullet, cv2, gym, hydra, robomimic, calvin_env, quaternion, git, einops, sklearn, diffusers; print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available())"
