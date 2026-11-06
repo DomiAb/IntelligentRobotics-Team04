@@ -8,6 +8,7 @@ python evaluate_behaviors.py \
 
 import argparse
 import json
+import os
 
 from core.calvin_behaviors import evaluate_dataset
 
@@ -26,6 +27,8 @@ def main():
     results_json = json.dumps(results, indent=4)
     print(results_json)
     if args.output is not None:
+        if os.path.dirname(args.output) != "":
+            os.makedirs(os.path.dirname(args.output), exist_ok=True)
         with open(args.output, "w") as f:
             f.write(results_json)
 

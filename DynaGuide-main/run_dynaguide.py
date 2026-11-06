@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 from core.dynamics_models import FinalStatePredictionDino
 from core.embedder_datasets import MultiviewDataset
 from core.calvin_utils import generate_reset_state
-from core.calvin_behaviors import GoalTracker, get_behavior_goals, summarize_behaviors
+from core.calvin_behaviors import make_tracker, get_behavior_goals, summarize_behaviors
 from core.dynaguide import calculate_classifier_guidance, calculate_position_guidance
 
 """
@@ -141,7 +141,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
         env.set_goal(im_paths = goal_dir)
    
     # this is for calvin envrionment     
-    special_state, _ = generate_reset_state(sim_hold = setup_config["env_setup"]) # and keep the switch off 
+    special_state, articulated_binaries = generate_reset_state(sim_hold = setup_config["env_setup"]) # and keep the switch off 
 
     if initial_positions is not None:
         state_to_reset = {"scene" : special_state, "robot" : random.choice(initial_positions)}
@@ -160,7 +160,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     got_exception = False
     success = env.is_success()["task"]
     traj = dict(actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict)
-    goal_tracker = GoalTracker(setup_config) # decides when the goal of the experiment config is reached 
+    goal_tracker = make_tracker(setup_config, articulated_binaries) # decides when the rollout ends, depending on the experiment config
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
@@ -281,8 +281,11 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
 def run_trained_agent(args):
     states_list, actions_list, labels_list = list(), list(), list()
 
-    if args.output_folder is not None and not os.path.isdir(args.output_folder):
-        os.mkdir(args.output_folder)
+    if args.output_folder is not None:
+        os.makedirs(args.output_folder, exist_ok=True)
+    for path in [args.video_path, args.dataset_path, args.json_path]:
+        if path is not None and os.path.dirname(path) != "":
+            os.makedirs(os.path.dirname(path), exist_ok=True)
 
     # some arg checking
     write_video = (args.video_path is not None)
@@ -357,9 +360,12 @@ def run_trained_agent(args):
         rollout_horizon = config.experiment.rollout.horizon
 
 
+    if args.no_window:
+        os.environ["CALVIN_NO_WINDOW"] = "1"
+
     env, _ = FileUtils.env_from_checkpoint(
-        ckpt_dict=ckpt_dict, 
-        env_name=args.env, 
+        ckpt_dict=ckpt_dict,
+        env_name=args.env,
         render=False, # args.render, 
         render_offscreen=(args.video_path is not None), 
         verbose=True,
@@ -529,6 +535,12 @@ if __name__ == "__main__":
     # )
 
     # Whether to render rollouts to screen
+    parser.add_argument(
+        "--no_window",
+        action='store_true',
+        help="(optional) don't open the PyBullet window. The images and the video stay the same",
+    )
+
     parser.add_argument(
         "--save_frames",
         action='store_true',

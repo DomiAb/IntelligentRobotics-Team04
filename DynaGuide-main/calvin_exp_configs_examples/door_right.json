@@ -8,5 +8,5 @@
         -0.024977345601772248,
         0.5462262406195053
       ],
-    "reset_poses": "/yourfolderhere/dataset/initial_calvin_robot_states_midpoint.json"
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_midpoint.json"
 }

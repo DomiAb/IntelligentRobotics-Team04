@@ -2,6 +2,8 @@ import h5py
 import numpy as np
 from collections import Counter
 
+from core.calvin_utils import check_state_difference
+
 """
 Goal conditions for CALVIN rollouts. The environment has no success signal of its own, so we detect what the robot achieved
 from the states and compare this to the target_behaviors / avoid_behaviors of the experiment config. run_dynaguide.py only
@@ -9,6 +11,9 @@ asks this file whether the goal is decided, it doesn't look at the state itself.
 
 The thresholds are the end states from the segmentation in data_processing_calvin/calvin_to_labeled_hdf5.py, which define what
 counts as a behavior in the guidance conditions. They are stricter than analyze_calvin_touch.py, which looks for the first small motion.
+
+The sanity_ behaviors replicate the original paper instead, to compare against the authors' numbers: the episode ends at the first
+small change (check_state_difference) and is scored by what analyze_calvin_touch.py labels as the first interaction.
 """
 
 BEHAVIORS = ["button_on", "button_off", "switch_on", "switch_off", "drawer_open", "drawer_close", "door_left", "door_right",
@@ -25,15 +30,50 @@ BLOCKS = {"red_displace" : 6, "blue_displace" : 12, "pink_displace" : 18} # inde
 BLOCK_MOVED = 0.01
 BLOCK_ROBOT_NEAR = 0.1 # so we don't count a block that moves with the drawer
 
+SANITY_BEHAVIORS = ["sanity_" + name for name in BEHAVIORS]
+SANITY_ANY = "sanity_any" # any interaction counts, for the control runs of the paper
+
 
 def get_behavior_goals(config):
     """Reads the goals of an experiment config. Unknown names raise an error, because a typo would silently score 0."""
     targets = config.get("target_behaviors", [])
     avoid = config.get("avoid_behaviors", [])
-    unknown = [name for name in targets + avoid if name not in BEHAVIORS]
+    unknown = [name for name in targets + avoid if name not in BEHAVIORS + SANITY_BEHAVIORS + [SANITY_ANY]]
     if len(unknown) > 0:
-        raise ValueError(f"Unknown behaviors {unknown} in the experiment config. Choose from {BEHAVIORS}")
+        raise ValueError(f"Unknown behaviors {unknown} in the experiment config. Choose from {BEHAVIORS + SANITY_BEHAVIORS + [SANITY_ANY]}")
+    if is_sanity(config) and any(not name.startswith("sanity_") for name in targets + avoid):
+        raise ValueError("Don't mix sanity_ behaviors with normal ones, they end the rollout in different ways.")
+    if SANITY_ANY in targets:
+        targets = [name for name in SANITY_BEHAVIORS if name != "sanity_no_behavior"]
     return targets, avoid
+
+
+def is_sanity(config):
+    return any(name.startswith("sanity_") for name in config.get("target_behaviors", []) + config.get("avoid_behaviors", []))
+
+
+def label_first_interaction(states, proprio):
+    """
+    The labels of generate_detailed_behavior_distribtuion in analyze_calvin_touch.py: the first small motion of an episode.
+    A list because the robot can displace several blocks at once, these all count in the paper.
+    """
+    states, proprio = np.asarray(states), np.asarray(proprio)
+    for state, robot in zip(states, proprio):
+        delta = state - states[0]
+        displaced = ["sanity_" + name for name, idx in BLOCKS.items()
+                     if np.linalg.norm(robot[0:3] - state[idx:idx + 3]) < 0.1 and np.linalg.norm(delta[idx:idx + 3]) > 0.001]
+        if len(displaced) > 0:
+            return displaced
+
+        if abs(delta[0]) > 0.05:
+            return ["sanity_door_left" if delta[0] > 0 else "sanity_door_right"]
+        if abs(delta[1]) > 0.05:
+            return ["sanity_drawer_open" if delta[1] > 0 else "sanity_drawer_close"]
+        if abs(delta[3]) > 0.02:
+            return ["sanity_switch_on" if delta[3] > 0 else "sanity_switch_off"]
+        if abs(delta[5]) > 0.01:
+            return ["sanity_button_on" if delta[5] > 0 else "sanity_button_off"]
+    return ["sanity_no_behavior"]
 
 
 class GoalTracker:
@@ -72,6 +112,30 @@ class GoalTracker:
         return self.achieved if len(self.achieved) > 0 else ["no_behavior"]
 
 
+class SanityTracker:
+    """
+    Ends the episode like the paper: at the first small change of anything, whatever the goal of the config is.
+    - binaries: the articulated states at the start of the episode, returned by generate_reset_state
+    """
+    def __init__(self, binaries):
+        self.binaries = binaries
+        self.states, self.proprios = list(), list()
+
+    def update(self, state, proprio):
+        self.states.append(state)
+        self.proprios.append(proprio)
+        return check_state_difference(self.states[0], state, proprio[0:3], self.binaries, for_display = False)
+
+    @property
+    def behaviors(self):
+        return label_first_interaction(self.states, self.proprios)
+
+
+def make_tracker(config, binaries):
+    """Returns what ends the rollout, which depends on the behaviors in the experiment config."""
+    return SanityTracker(binaries) if is_sanity(config) else GoalTracker(config)
+
+
 def is_success(behaviors, targets, avoid):
     """Success means any target happened (if there are targets) and nothing to avoid happened. None if the config has no goals."""
     if len(targets) == 0 and len(avoid) == 0:
@@ -85,14 +149,18 @@ def summarize_behaviors(episode_behaviors, config):
     targets, avoid = get_behavior_goals(config)
     successes = [is_success(behaviors, targets, avoid) for behaviors in episode_behaviors]
     has_goal = len(targets) > 0 or len(avoid) > 0
-    return {
+    counts = dict(Counter(name for behaviors in episode_behaviors for name in behaviors))
+    summary = {
         "Target_Behaviors" : targets,
         "Avoid_Behaviors" : avoid,
         "Success_Rate" : float(np.mean(successes)) if has_goal and len(successes) > 0 else None,
         "Num_Success" : int(np.sum(successes)) if has_goal else None,
-        "Behavior_Counts" : dict(Counter(name for behaviors in episode_behaviors for name in behaviors)),
+        "Behavior_Counts" : counts,
         "Episode_Behaviors" : episode_behaviors,
     }
+    if is_sanity(config): # the "Full distribution" that the paper plots
+        summary["Full_Distribution"] = {name : count / sum(counts.values()) for name, count in counts.items()}
+    return summary
 
 
 def replay_episode(states, proprio, config):
@@ -100,6 +168,8 @@ def replay_episode(states, proprio, config):
     states, proprio = np.asarray(states), np.asarray(proprio)
     if states.ndim == 3: # collapse this if there's framestacking for the policy
         states, proprio = states[:, -1], proprio[:, -1]
+    if is_sanity(config):
+        return label_first_interaction(states, proprio)
     tracker = GoalTracker(config)
     for state, robot in zip(states, proprio):
         if tracker.update(state, robot):

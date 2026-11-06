@@ -145,14 +145,14 @@ class PlayTableSimEnv(gym.Env):
                     log.error("Failed to connect to SHARED_MEMORY bullet server.\n" " Is it running?")
                     sys.exit(1)
                 self.p.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
-            # the EGL plugin only exists on Linux, and use_egl=true is baked into the checkpoints. The GUI client renders
-            # with the same hardware OpenGL pipeline as EGL, whereas DIRECT would fall back to the CPU TinyRenderer.
-            elif self.show_gui or (self.use_egl and sys.platform != "linux"):
+            # the EGL plugin only exists on Linux, and use_egl=true is baked into the checkpoints. Without EGL, getCameraImage
+            # defaults to the CPU TinyRenderer in both GUI and DIRECT, so CALVIN_NO_WINDOW drops the window without changing the images.
+            elif (self.show_gui or (self.use_egl and sys.platform != "linux")) and os.environ.get("CALVIN_NO_WINDOW") != "1":
                 self.p = bc.BulletClient(connection_mode=p.GUI)
                 cid = self.p._client
                 if cid < 0:
                     log.error("Failed to connect to GUI.")
-            elif self.use_egl:
+            elif self.use_egl and sys.platform == "linux":
                 options = f"--width={render_width} --height={render_height}"
                 self.p = p
                 cid = self.p.connect(p.DIRECT, options=options)
