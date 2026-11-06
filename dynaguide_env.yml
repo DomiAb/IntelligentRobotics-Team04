@@ -1,27 +1,62 @@
+# Environment for the original DynaGuide (./DynaGuide-main) with the CALVIN env.
+# Replaces the README install steps (pytorch, robomimic, calvin/install.sh). Rollouts target Windows + NVIDIA GPU.
+#
+#   conda env create -f dynaguide_env.yml      (run from this folder, paths below are relative to it)
+#   conda activate dynaguide_env
+#   cd DynaGuide-main
 name: dynaguide_env
 channels:
   - conda-forge
-  - defaults
 
 dependencies:
   - python=3.10
   - pip
+  # calvin_env does `import git` (GitPython), which fails at import time without a git executable.
+  - git
+  # pybullet has no Windows wheels on PyPI (pip would need an MSVC source build), so it comes from conda-forge.
+  - pybullet=3.25
+  - numpy=1.26
+  # conda-forge defaults to MKL on Windows, which clashes with the MKL/OpenMP that pip's torch brings along.
+  - libblas=*=*openblas
 
   - pip:
-    - einops
-    - scikit-learn
-
-    # PyTorch stack — pinned to what dsrl/dppo (installed later by setup_environment.sh)
-    # requires anyway (torch==2.4.0, see dsrl/dppo/pyproject.toml), so it doesn't get
-    # silently upgraded mid-setup. torchvision/torchaudio must match the torch version.
+    # torch from PyPI is CPU-only on Windows, but DynaGuide hard-codes "cuda". The +cu121 build gets picked from
+    # this index as the higher version. torch>=2.6 would break the checkpoints (torch.load weights_only default).
+    - --extra-index-url https://download.pytorch.org/whl/cu121
     - torch==2.4.0
     - torchvision==0.19.0
-    - torchaudio==2.4.0
-    # robomimic's diffusion policy needs diffusers>=0.26.2 (robomimic/setup.py), but
-    # anything <0.29.2 still imports the removed huggingface_hub.cached_download and
-    # fails at import time with a modern huggingface_hub.
+    # robomimic's diffusion policy needs diffusers>=0.26.2, and anything <0.29.2 still imports the removed
+    # huggingface_hub.cached_download.
     - diffusers==0.29.2
-    # robosuite only requires mujoco>=2.3.0 (unbounded), which pulls in a version far
-    # too new for this fork and breaks robot joint setup at env creation.
-    - mujoco==3.1.6
-    - numpy<2.0
+    - huggingface_hub==2.4.0
+
+    # calvin_env, pinned because its requirements.txt is unpinned and it relies on the old gym API.
+    # Do NOT install gymnasium here: robomimic/envs/env_gym.py would silently use it instead of gym and
+    # PlayTableSimEnv would not be found.
+    - gym==0.25.2
+    - hydra-core==1.3.2
+    - hydra-colorlog==1.2.0
+    - omegaconf==2.3.0
+    # opencv-python>=4.12 requires numpy>=2.
+    - opencv-python==4.10.0.84
+    - numpy-quaternion==2024.0.13
+    - numba==0.60.0
+    - scipy==1.15.3
+    - pandas==2.3.3
+    - matplotlib==3.10.8
+    - gitpython==3.1.45
+    - cloudpickle==3.1.2
+
+    # DynaGuide (DynaGuide-main/requirements.txt)
+    - einops==0.8.1
+    - scikit-learn==1.7.2
+
+    # DynaGuide's modified packages.
+    # calvin/calvin_env/tacto from install.sh is left out on purpose: PlayTableSimEnv deletes the tactile camera,
+    # so tacto is never imported, and its dependencies (urdfpy -> networkx==2.2) don't work on Python>=3.9.
+    - -e ./DynaGuide-main/robomimic
+    - -e ./DynaGuide-main/calvin/calvin_env
+
+variables:
+  # Safety net for the OpenMP clash above, otherwise a duplicate libiomp5md.dll aborts with "OMP: Error #15".
+  KMP_DUPLICATE_LIB_OK: "TRUE"

@@ -1,0 +1,65 @@
+FrameStackWrapper(
+    num_frames=2
+    env=Square_RealWorldDeployment
+    {
+        "camera_depths": false,
+        "camera_heights": 84,
+        "camera_names": [
+            "agentview",
+            "robot0_eye_in_hand"
+        ],
+        "camera_widths": 84,
+        "control_freq": 20,
+        "controller_configs": {
+            "control_delta": true,
+            "damping": 1,
+            "damping_limits": [
+                0,
+                10
+            ],
+            "impedance_mode": "fixed",
+            "input_max": 1,
+            "input_min": -1,
+            "interpolation": null,
+            "kp": 150,
+            "kp_limits": [
+                0,
+                300
+            ],
+            "orientation_limits": null,
+            "output_max": [
+                0.05,
+                0.05,
+                0.05,
+                0.5,
+                0.5,
+                0.5
+            ],
+            "output_min": [
+                -0.05,
+                -0.05,
+                -0.05,
+                -0.5,
+                -0.5,
+                -0.5
+            ],
+            "position_limits": null,
+            "ramp_ratio": 0.2,
+            "type": "OSC_POSE",
+            "uncouple_pos_ori": true
+        },
+        "gripper_types": [
+            "PandaGripper"
+        ],
+        "has_offscreen_renderer": true,
+        "has_renderer": false,
+        "ignore_done": true,
+        "render_gpu_device_id": 0,
+        "reward_shaping": false,
+        "robots": [
+            "Panda"
+        ],
+        "use_camera_obs": true,
+        "use_object_obs": true
+    }
+)

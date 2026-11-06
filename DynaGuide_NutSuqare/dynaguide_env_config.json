@@ -1,0 +1,7 @@
+{
+    "env_setup": {},
+    "use_neg": true,
+    "pos_examples": "guidance/guidance_n_20/guidance_all_60.hdf5",
+    "neg_examples": "guidance/guidance_bad_insertions_5_samples.hdf5",
+    "reset_poses": "datasets/square_initial_states.json"
+}
