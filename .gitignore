@@ -18,3 +18,4 @@ evaluation/
 .vscode/
 *.mp4
 !pictures/*.mp4
+.DS_Store

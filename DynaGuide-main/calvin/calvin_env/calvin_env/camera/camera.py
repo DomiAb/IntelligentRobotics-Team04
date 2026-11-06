@@ -38,7 +38,7 @@ class Camera:
     def process_rgbd(self, obs, nearval, farval):
         (width, height, rgbPixels, depthPixels, segmentationMaskBuffer) = obs
         rgb = np.reshape(rgbPixels, (height, width, 4))
-        rgb_img = rgb[:, :, :3]
+        rgb_img = rgb[:, :, :3].astype(np.uint8) # on Windows the pixels come back as int32, which imageio warns about for every video frame
         depth_buffer = np.reshape(depthPixels, [height, width])
         depth = self.z_buffer_to_real_distance(z_buffer=depth_buffer, far=farval, near=nearval)
         return rgb_img, depth
