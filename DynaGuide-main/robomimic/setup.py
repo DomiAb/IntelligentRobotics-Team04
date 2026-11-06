@@ -26,7 +26,7 @@ setup(
         "imageio",
         "imageio-ffmpeg",
         "matplotlib",
-        "egl_probe>=1.0.1; platform_system == 'Linux'", # its build runs "cmake ..; make -j", which fails on Windows
+        # "egl_probe>=1.0.1", # only used by robosuite envs, and its build ("cmake ..; make -j") fails on Windows
         # "torch",
         # "torchvision",
         "diffusers>=0.26.2",
