@@ -36,7 +36,8 @@ import matplotlib.pyplot as plt
 # these are the core modules that create the dynaguide behavior 
 from core.dynamics_models import FinalStatePredictionDino
 from core.embedder_datasets import MultiviewDataset
-from core.calvin_utils import generate_reset_state, check_state_difference
+from core.calvin_utils import generate_reset_state
+from core.calvin_behaviors import GoalTracker, get_behavior_goals, summarize_behaviors
 from core.dynaguide import calculate_classifier_guidance, calculate_position_guidance
 
 """
@@ -140,7 +141,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
         env.set_goal(im_paths = goal_dir)
    
     # this is for calvin envrionment     
-    special_state, articulated_binaries = generate_reset_state(sim_hold = setup_config["env_setup"]) # and keep the switch off 
+    special_state, _ = generate_reset_state(sim_hold = setup_config["env_setup"]) # and keep the switch off 
 
     if initial_positions is not None:
         state_to_reset = {"scene" : special_state, "robot" : random.choice(initial_positions)}
@@ -159,7 +160,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     got_exception = False
     success = env.is_success()["task"]
     traj = dict(actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict)
-    start_state = obs.copy()
+    goal_tracker = GoalTracker(setup_config) # decides when the goal of the experiment config is reached 
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
@@ -219,14 +220,12 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
          
             # FOR CALVIN ENVIRONMENT
             fed_state = obs["states"]
-            fed_start_state = start_state["states"]
             fed_proprio = obs["proprio"]
             if len(obs["states"].shape) == 2: # collapse this if there's framestacking for the policy 
                 fed_state = fed_state[-1] #obs["states"][-1]
-                fed_start_state = fed_start_state[-1]
                 fed_proprio = fed_proprio[-1]
-            
-            done = check_state_difference(fed_start_state, fed_state, fed_proprio[0:3], articulated_binaries, for_display = False)
+
+            done = goal_tracker.update(fed_state, fed_proprio)
 
             # break if done or if success
             if done or success:
@@ -276,7 +275,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
         else:
             traj[k] = np.array(traj[k])
 
-    return stats, traj
+    return stats, traj, goal_tracker.behaviors
 
 
 def run_trained_agent(args):
@@ -393,9 +392,11 @@ def run_trained_agent(args):
         total_samples = 0
 
     rollout_stats = []
+    episode_behaviors = []
+    get_behavior_goals(exp_setup_config) # catch a typo in the config before spending time on rollouts
     for i in tqdm(range(rollout_num_episodes)):
         try:
-            stats, traj = rollout(
+            stats, traj, behaviors = rollout(
                 policy=policy, 
                 env=env, 
                 horizon=rollout_horizon, 
@@ -423,6 +424,8 @@ def run_trained_agent(args):
             sys.exit(0)
         
         rollout_stats.append(stats)
+        episode_behaviors.append(behaviors)
+        print(f"Rollout {i} behavior: {behaviors}")
 
         if write_dataset:
             # store transitions
@@ -444,7 +447,7 @@ def run_trained_agent(args):
 
     rollout_stats = TensorUtils.list_of_flat_dict_to_dict_of_list(rollout_stats)
     avg_rollout_stats = { k : np.mean(rollout_stats[k]) for k in rollout_stats }
-    avg_rollout_stats["Num_Success"] = np.sum(rollout_stats["Success_Rate"])
+    avg_rollout_stats.update(summarize_behaviors(episode_behaviors, exp_setup_config)) # replaces the environment's Success_Rate, which is always 0
     avg_rollout_stats["Time_Episode"] = np.sum(rollout_stats["time"]) / 60. # total time taken for rollouts in minutes
     avg_rollout_stats["Num_Episode"] = len(rollout_stats["Success_Rate"]) # number of episodes attempted
     print("Average Rollout Stats")

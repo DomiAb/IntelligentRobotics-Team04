@@ -1,4 +1,5 @@
 {
+    "target_behaviors" : ["door_left", "drawer_open"],
     "env_setup" : {"drawer": 0, "sliding_door" : 0},
     "use_neg" : true, 
     "pos_examples": "/yourfolderhere/dataset/CalvinDD_validation_combined_categories_wcubes/door_left_drawer_open.hdf5",

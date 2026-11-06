@@ -1,7 +1,8 @@
 {
+    "target_behaviors" : ["switch_on"],
     "env_setup" : {"switch" : 0},
     "use_neg" : false, 
-    "pos_examples": "C:/Users/user/DynaGuide-main/IntelligentRobotics-Team04/DynaGuide-main/guidance_condition_switch_on_20.hdf5",
+    "pos_examples": "guidance_condition_switch_on_20.hdf5",
     "loc_target": [
         0.27980308053048975,
         0.023739273400879772,

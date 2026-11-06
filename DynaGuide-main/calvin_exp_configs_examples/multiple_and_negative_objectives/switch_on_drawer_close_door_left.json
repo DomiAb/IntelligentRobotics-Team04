@@ -1,4 +1,5 @@
 {
+    "target_behaviors" : ["switch_on", "drawer_close", "door_left"],
     "env_setup" : {"switch" : 0, "drawer" : 0.16, "sliding_door" : 0},
     "use_neg" : false, 
     "neg_examples": null,

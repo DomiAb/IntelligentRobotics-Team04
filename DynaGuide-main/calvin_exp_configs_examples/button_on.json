@@ -1,4 +1,5 @@
 {
+    "target_behaviors" : ["button_on"],
     "env_setup" : {"green_light" : 0},
     "use_neg" : false, 
     "pos_examples": "/yourfolderhere/dataset/CalvinDD_validation_by_category_wcubes/button_on_20.hdf5",

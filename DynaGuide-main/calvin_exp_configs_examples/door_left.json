@@ -1,4 +1,5 @@
 {
+    "target_behaviors" : ["door_left"],
     "env_setup" : {"sliding_door" : 0},
     "use_neg" : false, 
     "pos_examples": "/yourfolderhere/dataset/CalvinDD_validation_by_category_wcubes/door_left_20.hdf5",

@@ -1,4 +1,5 @@
 {
+    "target_behaviors" : ["switch_off"],
     "env_setup" : {"switch" : 0.085},
     "use_neg" : false, 
     "pos_examples": "/yourfolderhere/dataset/CalvinDD_validation_by_category_wcubes/switch_off_20.hdf5",

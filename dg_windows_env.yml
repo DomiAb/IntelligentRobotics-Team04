@@ -4,6 +4,7 @@ channels:
 dependencies:
   - bzip2=1.0.8
   - ca-certificates=2026.10.20
+  - git # GitPython, imported by robomimic, fails without a git executable
   - libexpat=2.9.0
   - libffi=3.4.8
   - libzlib=1.3.2

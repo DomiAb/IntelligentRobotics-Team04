@@ -1,4 +1,5 @@
 {
+    "avoid_behaviors" : ["drawer_open", "door_right"],
     "env_setup" : {"sliding_door" : 0.28, "drawer" : 0},
     "use_neg" : true, 
     "neg_examples": "/yourfolderhere/dataset/CalvinDD_validation_combined_categories_wcubes/door_right_drawer_open.hdf5",

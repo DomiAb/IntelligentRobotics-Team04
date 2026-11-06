@@ -1,4 +1,5 @@
 {
+    "target_behaviors" : ["door_left", "button_on"],
     "env_setup" : {"green_light": 0, "sliding_door" : 0},
     "use_neg" : false, 
     "pos_examples": "/yourfolderhere/dataset/CalvinDD_validation_combined_categories_wcubes/button_on_door_left.hdf5",

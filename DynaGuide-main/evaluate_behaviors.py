@@ -1,0 +1,34 @@
+"""
+Use this script to score a saved CALVIN rollout file against the goals of an experiment config, without running the rollouts again.
+python evaluate_behaviors.py \
+    --dataset results/output_rollout.hdf5 \
+    --config calvin_exp_configs_examples/switch_on.json \
+    --output results/behaviors.json
+"""
+
+import argparse
+import json
+
+from core.calvin_behaviors import evaluate_dataset
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Label what the robot did in each rollout and calculate the success rate.")
+    parser.add_argument("--dataset", required=True, help="Rollout file that was saved with --dataset_path and --dataset_obs")
+    parser.add_argument("--config", required=True, help="Experiment config with target_behaviors and/or avoid_behaviors")
+    parser.add_argument("--output", default=None, help="Optional path to save the results as json")
+    args = parser.parse_args()
+
+    with open(args.config, "r") as f:
+        config = json.load(f)
+
+    results = evaluate_dataset(args.dataset, config)
+    results_json = json.dumps(results, indent=4)
+    print(results_json)
+    if args.output is not None:
+        with open(args.output, "w") as f:
+            f.write(results_json)
+
+
+if __name__ == "__main__":
+    main()
