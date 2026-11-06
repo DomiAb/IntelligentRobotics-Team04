@@ -44,7 +44,7 @@ Then run this from the repo root:
 conda activate dynaguide_env
 cd DynaGuide-main
 if not exist results mkdir results
-python run_dynaguide.py --video_path results/SwitchOnDynaGuide/SwitchOnDynaGuide.mp4 --dataset_path results/SwitchOnDynaGuide/SwitchOnDynaGuide.hdf5 --dataset_obs --json_path results/SwitchOnDynaGuide/SwitchOnDynaGuide.json --horizon 400 --n_rollouts 100 --agent ../base_policy_300.pth --output_folder results/SwitchOnDynaGuide --video_skip 2 --exp_setup_config ../configs/switch_on.json --guidance ../dynamics_model_5900.pth --camera_names third_person --scale 1.5 --ss 4 --alpha 30 --save_frames
+python run_dynaguide.py --video_path results\output_video.mp4 --dataset_path results\output_rollout.hdf5 --dataset_obs --json_path results\output_log.json --horizon 400 --n_rollouts 3 --agent base_policy_300.pth --output_folder results --video_skip 2 --exp_setup_config calvin_exp_configs_examples\switch_on.json --guidance dynamics_model_5900.pth --camera_names third_person --scale 1.5 --ss 4 --alpha 30 --save_frames
 ```
 
 The paths are relative, so it has to run from inside `DynaGuide-main`. A PyBullet window opens during the rollouts, leave it open. Results land in `DynaGuide-main/results/SwitchOnDynaGuide`. 

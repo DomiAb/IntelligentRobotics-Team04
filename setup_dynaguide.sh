@@ -29,6 +29,10 @@ else
     conda env create -n "$ENV_NAME" -f "$ENV_FILE"
 fi
 
+# DynaGuide's modified local packages. calvin/calvin_env/tacto is skipped, see dynaguide_env.yml.
+conda run -n "$ENV_NAME" python -m pip install -e ./DynaGuide-main/robomimic
+conda run -n "$ENV_NAME" python -m pip install -e ./DynaGuide-main/calvin/calvin_env
+
 mkdir -p DynaGuide-main/results
 
 conda run -n "$ENV_NAME" python -c "import torch, pybullet, cv2, gym, hydra, robomimic, calvin_env, quaternion, git, einops, sklearn, diffusers; print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available())"

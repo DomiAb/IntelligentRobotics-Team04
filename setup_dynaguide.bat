@@ -1,5 +1,5 @@
 @echo off
-rem One-command install of the DynaGuide env on Windows (Linux and macOS: setup_dynaguide.sh).
+rem One-command install of the DynaGuide env on Windows (Ubuntu: setup_dynaguide.sh).
 rem Usage: run setup_dynaguide.bat from an Anaconda Prompt
 setlocal
 
@@ -23,6 +23,12 @@ call conda env create -n %ENV_NAME% -f dynaguide_env.yml
 if errorlevel 1 goto failed
 
 :check
+rem DynaGuide's modified local packages. calvin\calvin_env\tacto is skipped, see dynaguide_env.yml.
+call conda run -n %ENV_NAME% python -m pip install -e ./DynaGuide-main/robomimic
+if errorlevel 1 goto failed
+call conda run -n %ENV_NAME% python -m pip install -e ./DynaGuide-main/calvin/calvin_env
+if errorlevel 1 goto failed
+
 if not exist "DynaGuide-main\results" mkdir "DynaGuide-main\results"
 
 call conda run -n %ENV_NAME% python -c "import torch, pybullet, cv2, gym, hydra, robomimic, calvin_env, quaternion, git, einops, sklearn, diffusers; print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available())"
