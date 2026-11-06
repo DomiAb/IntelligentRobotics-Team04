@@ -199,7 +199,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                     video_writer.append_data(video_img)
                 if step_i % 14 == 0 and save_frames:
                     print("SAVING!!")
-                    plt.imsave(exp_dir + f"/{rollout_count}_{step_i}.png", video_img)
+                    plt.imsave(exp_dir + f"/{rollout_count}_{step_i}.png", video_img.astype(np.uint8))
                 video_count += 1
 
             # collect transition
