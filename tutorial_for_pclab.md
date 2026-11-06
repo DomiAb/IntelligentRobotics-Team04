@@ -27,4 +27,24 @@ AI needs to make an installer here!... DynaGuide has too many missing packages
 1. Download the Base policy from this [link](https://drive.google.com/file/d/1lcI_PBgFIYDsoK4T4qO7SGJJgI2lw0Kd/view?usp=drive_link)
 1. Download the Guidance conditions for SWITCH_ON from this [link](https://drive.google.com/file/d/1wtEGnG87Y-imqD2MygcqbJwp_RGi7YNB/view?usp=drive_link)
 1. Modify the `calvin_exp_configs_examples/switch_on.json` by changing the `pos_examples` file path to the downloaded guidance condition 
-1. Make a folder called `results` in this directory 
+1. Make a folder called `results` in this directory
+
+## Run DynaGuide (Windows, Anaconda Prompt)
+
+Put these three downloaded files in the repo root (same folder as `setup_dynaguide.bat`), keeping their names:
+- `dynamics_model_5900.pth`
+- `base_policy_300.pth`
+- `guidance_condition_switch_on_20.hdf5`
+
+`configs/switch_on.json` already points to the guidance file there, so nothing needs editing. Install once with `setup_dynaguide.bat` if the env doesn't exist yet.
+
+Then run this from the repo root:
+
+```bat
+conda activate dynaguide_env
+cd DynaGuide-main
+if not exist results mkdir results
+python run_dynaguide.py --video_path results/SwitchOnDynaGuide/SwitchOnDynaGuide.mp4 --dataset_path results/SwitchOnDynaGuide/SwitchOnDynaGuide.hdf5 --dataset_obs --json_path results/SwitchOnDynaGuide/SwitchOnDynaGuide.json --horizon 400 --n_rollouts 100 --agent ../base_policy_300.pth --output_folder results/SwitchOnDynaGuide --video_skip 2 --exp_setup_config ../configs/switch_on.json --guidance ../dynamics_model_5900.pth --camera_names third_person --scale 1.5 --ss 4 --alpha 30 --save_frames
+```
+
+The paths are relative, so it has to run from inside `DynaGuide-main`. A PyBullet window opens during the rollouts, leave it open. Results land in `DynaGuide-main/results/SwitchOnDynaGuide`. 
