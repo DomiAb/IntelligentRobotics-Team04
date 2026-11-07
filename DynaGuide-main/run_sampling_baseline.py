@@ -27,6 +27,7 @@ from robomimic.algo import RolloutPolicy
 from robomimic.scripts.playback_dataset import DEFAULT_CAMERAS
 import random 
 
+from core.calvin_utils import generate_reset_state
 from core.dynamics_models import FinalStatePredictionDino
 
 from core.embedder_datasets import MultiviewDataset
@@ -41,37 +42,6 @@ with open("/store/real/maxjdu/repos/robotrainer/dataset/initial_calvin_robot_sta
     poses = json.load(f) 
     robot_initial_positions = [np.array(k) for k in poses["robot_states"]]
 
-
-def generate_reset_state(sim_hold = {}):
-    # {"sliding_door" : state_obs[0],
-    #         "drawer" : state_obs[1],
-    #         "button" : state_obs[2],
-    #         "switch" : state_obs[3],
-    #         "lightbulb" : state_obs[4],
-    #         "green_light" : state_obs[5],
-    #         "red_block": state_obs[6:9], # we are ignoring rotations 
-    #         "blue_block" : state_obs[12 : 15],
-    #         "pink_block" : state_obs[18 :21]}, {
-    #         "red_rot": R.from_euler("XYZ", state_obs[9:12]).as_matrix(), # we are ignoring rotations 
-    #         "blue_rot" : R.from_euler("XYZ", state_obs[15:18]).as_matrix(),
-    #         "pink_rot" : R.from_euler("XYZ", state_obs[21:]).as_matrix()
-    #         }
-    adjustables = ["sliding_door", "drawer", "switch", "green_light"]
-    adjustable_index = [0, 1, 3, 5]
-    adjustable_limits = [[0, 0.27], [0, 0.16], [0, 0.09], [0, 1]]
-    state = np.zeros((24,))
-    binary_list = list()
-    # return state, [False, False, False, False]
-    for adjustable, idx, limits in zip(adjustables, adjustable_index, adjustable_limits):
-        if adjustable in sim_hold:
-            state[idx] = float(sim_hold[adjustable])
-            binary_list.append(sim_hold[adjustable] > (limits[1] - limits[0]) / 2)
-        # are just doing binaries because it's more in distribution 
-        else:
-            select = random.random() > 0.5 
-            state[idx] = limits[1] if select else limits[0]
-            binary_list.append(select)
-    return state, binary_list 
 
 def articulated_binaries_from_start_state(start_state):
     adjustable_index = [0, 1, 3, 5]

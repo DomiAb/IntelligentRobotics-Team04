@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 from collections import Counter
 
-from core.calvin_utils import check_state_difference
+from core.calvin_utils import articulated_value, check_state_difference, validate_env_setup
 
 """
 Goal conditions for CALVIN rollouts. The environment has no success signal of its own, so we detect what the robot achieved
@@ -50,6 +50,26 @@ def get_behavior_goals(config):
 
 def is_sanity(config):
     return any(name.startswith("sanity_") for name in config.get("target_behaviors", []) + config.get("avoid_behaviors", []))
+
+
+def validate_experiment_config(config):
+    """
+    Raises an error for a config whose goals can't be scored: a typo in env_setup or in the behaviors, or a goal that the
+    GoalTracker can't detect from the start state, like drawer_open from a drawer that is already open or half open.
+    """
+    targets, avoid = get_behavior_goals(config)
+    env_setup = config["env_setup"]
+    validate_env_setup(env_setup)
+    if is_sanity(config):
+        return # the SanityTracker doesn't use these thresholds
+    for joint, (idx, low, high, rising, falling) in zip(["sliding_door", "drawer", "switch", "green_light"], ARTICULATED):
+        if joint not in env_setup:
+            continue
+        start = articulated_value(joint, env_setup[joint])
+        if rising in targets + avoid and start >= low:
+            raise ValueError(f"env_setup {joint} starts at {start}, but {rising} is only detected when starting below {low}")
+        if falling in targets + avoid and start <= high:
+            raise ValueError(f"env_setup {joint} starts at {start}, but {falling} is only detected when starting above {high}")
 
 
 def label_first_interaction(states, proprio):

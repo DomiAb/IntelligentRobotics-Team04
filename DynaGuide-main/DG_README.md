@@ -109,6 +109,39 @@ The `env_setup` tells the environment how to configure the articulated elements.
 - `drawer` [0, 0.16] sets the drawer to a position. T he base position (0) is the drawer closed. At 0.16, the drawer is open. 
 - `switch` sets the lever switch to a position (and the light is set automatically). The base position (0) is the switch in the off position. At 0.085, the switch is in the on position. 
 
+Anything you leave out stays random. Instead of numbers you can use words: `drawer` is `open` / `closed`, `sliding_door` is `left` / `right` (the door always covers one cabinet compartment), `switch` and `green_light` are `on` / `off`.
+
+`blocks` places each of the blocks `red`, `blue` and `pink`. A block you leave out stays random:
+
+```
+"env_setup" : {
+    "drawer" : "open",
+    "blocks" : {
+        "red" : "table_center",                              -> a place from the list below
+        "blue" : {"place" : "drawer", "yaw" : 0.5},          -> a place, with a chosen yaw and/or an "offset" : [dx, dy]
+        "pink" : {"pos" : [0.1, -0.1, 0.46], "yaw" : 0.0}    -> coordinates of the block center
+    }
+}
+```
+
+| Where | Random position and yaw | Fixed position, yaw 0 |
+| --- | --- | --- |
+| Table | `table` | `table_left`, `table_center`, `table_right` |
+| Drawer | `drawer` | `drawer_left`, `drawer_center`, `drawer_right` |
+| Cabinet, left compartment | `cabinet_left` | `cabinet_left_center` |
+| Cabinet, right compartment | `cabinet_right` | `cabinet_right_center` |
+| Out of the camera view | | `hidden` |
+
+Drawer places move with the drawer, for any drawer state of the reset. A block in a closed drawer can't be seen. Coordinates in `pos` don't move with the drawer, so for your own position in the drawer use a drawer place with an `offset`. A block in the compartment behind the sliding door can't be seen either.
+
+An unknown key or place, overlapping blocks, or a goal that can't be scored from the start state (like `drawer_open` with the drawer already open) stop `run_dynaguide.py` before it loads anything.
+
+To check a config without running a policy, render a set of resets. The results go into a new folder inside `results/reset_previews`, or inside `--output_folder` if you pass one. `resets_start.png` and `resets_settled.png` show the resets from the camera of the policy. Resets where a block falls, shifts, intersects another block or touches the robot get a red border and are listed in `report.json`:
+
+```
+python preview_resets.py --config calvin_exp_configs_examples/reset_layouts/blocks_in_all_places.json
+```
+
 ## Running DynaGuide
 To run DynaGuide, you need 1) the experiment config file 2) trained base policy 3) trained dynamics model and 4) guidance conditions (h5 files). Once you have these components, you can run `run_dynaguide.py` using the following code:
 

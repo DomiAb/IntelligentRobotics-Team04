@@ -1,0 +1,12 @@
+{
+    "env_setup" : {
+        "drawer" : "open",
+        "sliding_door" : "right",
+        "blocks" : {
+            "red" : "table_center",
+            "blue" : "drawer_center",
+            "pink" : {"place" : "cabinet_left", "yaw" : 0.0}
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

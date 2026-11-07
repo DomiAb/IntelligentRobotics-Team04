@@ -113,7 +113,7 @@ class PlayTableScene:
             for switch, state in zip(self.switches, switch_info):
                 switch.reset(state)
             if shuffle_movable_objects:
-                self.reset_movable_objects(table_only = table_only)
+                self.reset_movable_objects(table_only = table_only, obj_info = obj_info)
             else:
                 for obj, state in zip(self.movable_objects, obj_info):
                     obj.reset(state)
@@ -139,12 +139,18 @@ class PlayTableScene:
 
         return door_info, button_info, switch_info, light_info, obj_info
 
-    def reset_movable_objects(self, table_only = False):
-        """reset movable objects such that there are no pairwise contacts"""
+    def reset_movable_objects(self, table_only = False, obj_info = None):
+        """
+        reset movable objects such that there are no pairwise contacts
+        - obj_info: one pose per object. A finite pose keeps the object there, NaN (or no obj_info at all) samples a new one.
+        """
+        if obj_info is None:
+            obj_info = [None] * len(self.movable_objects)
+        poses = [None if pose is None or np.isnan(pose).any() else pose for pose in obj_info]
         num_sampling_iterations = 1000
         for i in range(num_sampling_iterations):
-            for obj in self.movable_objects:
-                obj.reset(table_only = table_only)
+            for obj, pose in zip(self.movable_objects, poses):
+                obj.reset(pose, table_only = table_only)
             self.p.stepSimulation()
             contact = False
             for obj_a, obj_b in itertools.combinations(self.movable_objects, 2):

@@ -1,0 +1,21 @@
+{
+    "target_behaviors" : ["switch_on"],
+    "env_setup" : {
+        "switch" : 0,
+        "drawer" : "open",
+        "sliding_door" : "right",
+        "blocks" : {
+            "red" : "drawer_center",
+            "blue" : "cabinet_left_center",
+            "pink" : "table_center"
+        }
+    },
+    "use_neg" : false, 
+    "pos_examples": "guidance_condition_switch_on_20.hdf5",
+    "loc_target": [
+        0.27980308053048975,
+        0.023739273400879772,
+        0.5706737502343485
+      ],
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

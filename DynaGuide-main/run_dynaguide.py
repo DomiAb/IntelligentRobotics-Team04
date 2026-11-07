@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 from core.dynamics_models import FinalStatePredictionDino
 from core.embedder_datasets import MultiviewDataset
 from core.calvin_utils import generate_reset_state
-from core.calvin_behaviors import make_tracker, get_behavior_goals, summarize_behaviors
+from core.calvin_behaviors import make_tracker, validate_experiment_config, summarize_behaviors
 from core.dynaguide import calculate_classifier_guidance, calculate_position_guidance
 
 """
@@ -352,7 +352,8 @@ def run_trained_agent(args):
     if args.exp_setup_config is not None: 
         with open(args.exp_setup_config, "r") as f:
             exp_setup_config = json.load(f)
-    
+        validate_experiment_config(exp_setup_config) # catch a typo in the config before spending time on rollouts
+
     # ensure backward compatibility 
     good_dataset_path = args.good_states if args.exp_setup_config is None else exp_setup_config["pos_examples"]
     good_dataset = None 
@@ -432,7 +433,6 @@ def run_trained_agent(args):
 
     rollout_stats = []
     episode_behaviors = []
-    get_behavior_goals(exp_setup_config) # catch a typo in the config before spending time on rollouts
     for i in tqdm(range(rollout_num_episodes)):
         try:
             stats, traj, behaviors = rollout(
