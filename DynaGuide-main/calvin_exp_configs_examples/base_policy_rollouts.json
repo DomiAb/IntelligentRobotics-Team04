@@ -1,0 +1,6 @@
+{
+    "env_setup" : {},
+    "use_neg" : false,
+    "pos_examples": "guidance_condition_switch_on_20.hdf5",
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}
