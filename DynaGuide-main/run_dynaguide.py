@@ -71,6 +71,18 @@ def prepare_output_folder(args):
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
+def find_calvin_env(env):
+    """
+    Returns the CALVIN env inside the wrappers. How many there are depends on the checkpoint: EnvGym always, and FrameStackWrapper
+    around it if the policy stacks frames. robomimic's unwrapped stops at EnvGym, so it can't be used for this.
+    """
+    while not hasattr(env, "disable_live_render"):
+        if not hasattr(env, "env"):
+            raise AttributeError(f"Found no CALVIN env inside the wrappers, stopped at {type(env).__name__}")
+        env = env.env
+    return env
+
+
 def render_video_frame(env, camera_names, collage):
     video_img = []
     for cam_name in camera_names:
@@ -404,7 +416,7 @@ def run_trained_agent(args):
     )
 
     if args.no_live_render:
-        env.env.unwrapped.disable_live_render()
+        find_calvin_env(env).disable_live_render()
 
     universal_state = env.get_state() if args.same_env else None
 

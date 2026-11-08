@@ -1,0 +1,22 @@
+{
+    "description" : "Every single-step goal of drawer, sliding door and switch, from each start state those three can be in. Blocks and the green light stay random.",
+    "joints" : {
+        "drawer" : ["closed", "open"],
+        "sliding_door" : ["right", "left"],
+        "switch" : ["off", "on"]
+    },
+    "goals" : {
+        "drawer_open" : "datasets/guidance_conditions/debug_all/drawer_open.hdf5",
+        "drawer_close" : "datasets/guidance_conditions/debug_all/drawer_close.hdf5",
+        "door_left" : "datasets/guidance_conditions/debug_all/door_left.hdf5",
+        "door_right" : "datasets/guidance_conditions/debug_all/door_right.hdf5",
+        "switch_on" : "guidance_condition_switch_on_20.hdf5",
+        "switch_off" : "datasets/guidance_conditions/debug_all/switch_off.hdf5"
+    },
+    "n_rollouts" : 10,
+    "horizon" : 400,
+    "scale" : 1.5,
+    "ss" : 4,
+    "alpha" : 30,
+    "reset_poses" : "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

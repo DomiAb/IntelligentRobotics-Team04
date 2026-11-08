@@ -378,8 +378,9 @@ def save_preview(path, segments, size = 200):
     tiles = list()
     for segment in segments:
         tile = cv2.resize(segment.recording.load_images("third_person", [segment.last])[0], (size, size))
-        for color, thickness in [((0, 0, 0), 3), ((255, 255, 255), 1)]:
-            cv2.putText(tile, segment.label, (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.35, color, thickness, cv2.LINE_AA)
+        for line, text in enumerate(segment.label.split("/")): # a long name like goal/start state/demo_3 gets a line per part
+            for color, thickness in [((0, 0, 0), 3), ((255, 255, 255), 1)]:
+                cv2.putText(tile, text, (4, 14 + 13 * line), cv2.FONT_HERSHEY_SIMPLEX, 0.35, color, thickness, cv2.LINE_AA)
         tiles.append(tile)
     columns = int(np.ceil(np.sqrt(len(tiles))))
     tiles += [np.zeros_like(tiles[0])] * (columns * int(np.ceil(len(tiles) / columns)) - len(tiles))
