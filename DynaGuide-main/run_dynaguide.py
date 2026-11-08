@@ -149,7 +149,7 @@ def visualize_guidance_process(model, actions_list, obs, target_embeddings, alph
 
 def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=False, camera_names=None,
             classifier_grad = None, reset_state = None, model = None, exp_dir = None, rollout_count = None, good_embeddings = None, bad_embeddings = None,
-            setup_config = None, save_frames = False, goal_dir = None, ss = 4, alpha = 20, initial_positions = None, no_collage = False):
+            setup_config = None, save_frames = False, goal_dir = None, ss = 4, alpha = 20, initial_positions = None, no_collage = False, keep_images = False):
     """
     This is the main function that runs DynaGuide. Notable arguments:
     - classifier_grad: the dynaguide function returned by calculate_classifier_guidance 
@@ -163,6 +163,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     - initial_positions: a list of initial robot configurations for resetting 
     - goal_dir: place to retrieve goal images; if none, we are not goal conditioning
     - no_collage: leave the dynamics model reconstructions out of the video, which skips their forward passes
+    - keep_images: also return the images in traj["obs"], so create_guidance_conditions.py can make conditions from this rollout
     """
     rollout_timestamp = time.time()
     assert isinstance(env, EnvBase) or isinstance(env, EnvWrapper)
@@ -252,8 +253,9 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                 # Note: We need to "unprocess" the observations to prepare to write them to dataset.
                 #       This includes operations like channel swapping and float to uint8 conversion
                 #       for saving disk space.
-                del obs["third_person"] # don't keep the images for sake of space 
-                del obs["eye_in_hand"]
+                if not keep_images:
+                    del obs["third_person"] # don't keep the images for sake of space 
+                    del obs["eye_in_hand"]
                 traj["obs"].append(ObsUtils.unprocess_obs_dict(obs))
                 traj["next_obs"].append(ObsUtils.unprocess_obs_dict(next_obs))
          
@@ -458,7 +460,8 @@ def run_trained_agent(args):
                 goal_dir = args.goal_dir,
                 ss = args.ss,
                 initial_positions = robot_initial_positions,
-                no_collage = args.no_collage
+                no_collage = args.no_collage,
+                keep_images = args.dataset_images
             )
         except KeyboardInterrupt:
             sys.exit(0)
@@ -476,8 +479,10 @@ def run_trained_agent(args):
             ep_data_grp.create_dataset("dones", data=np.array(traj["dones"]))
             if args.dataset_obs:
                 for k in traj["obs"]:
-                    ep_data_grp.create_dataset("obs/{}".format(k), data=np.array(traj["obs"][k]))
-                    ep_data_grp.create_dataset("next_obs/{}".format(k), data=np.array(traj["next_obs"][k]))
+                    is_image = k in ["third_person", "eye_in_hand"]
+                    ep_data_grp.create_dataset("obs/{}".format(k), data=np.array(traj["obs"][k]), compression="gzip" if is_image else None)
+                    if not is_image: # next_obs is only one frame ahead, so saving its images would double the file
+                        ep_data_grp.create_dataset("next_obs/{}".format(k), data=np.array(traj["next_obs"][k]))
 
             # episode metadata
             if "model" in traj["initial_state_dict"]:
@@ -567,6 +572,12 @@ if __name__ == "__main__":
     #     action='store_true',
     #     help="on-screen rendering",
     # )
+
+    parser.add_argument(
+        "--dataset_images",
+        action='store_true',
+        help="also save the camera images of the rollouts in the dataset, so create_guidance_conditions.py can make guidance conditions from them. Makes the file much bigger",
+    )
 
     # Whether to render rollouts to screen
     parser.add_argument(

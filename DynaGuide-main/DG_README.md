@@ -45,6 +45,7 @@ You will find the scripts for processing CALVIN data in the `data_processing_cal
 
 Additional notes 
 - To remove individual trajectories from guidance conditions files (e.g. there's a bad segmentation), use `hdf5_filter.py`. 
+- To create guidance conditions from any recording (a CALVIN folder or your own rollouts) without the steps above, and to search for frames in a state you describe, see `Create guidance conditions.ipynb`.
 - To extract initial robot states for use in experiment resets (found in the config file), use `retrieve_initial_robot_states.py`
 - To extract goal images for the goal conditioning baseline, use `generate_goal_images.py` 
 

@@ -1,0 +1,18 @@
+{
+    "goals" : [
+        {"name" : "drawer_open_hand_near", "n" : 5,
+         "where" : {"drawer" : "open", "tcp_near" : "drawer_handle"}},
+
+        {"name" : "door_left_hand_near", "n" : 5,
+         "where" : {"sliding_door" : "left", "tcp_near" : "door_handle"}},
+
+        {"name" : "block_lifted", "n" : 5,
+         "where" : {"blocks" : {"blue" : "lifted"}}},
+
+        {"name" : "block_lifted_over_open_drawer", "n" : 5,
+         "where" : {"drawer" : "open", "blocks" : {"blue" : "lifted"}, "tcp_near" : "drawer_handle", "tcp_radius" : 0.25}},
+
+        {"name" : "block_in_open_drawer_hand_near", "n" : 5,
+         "where" : {"drawer" : "open", "blocks" : {"blue" : "drawer"}, "tcp_near" : "blue", "gripper" : "open"}}
+    ]
+}
