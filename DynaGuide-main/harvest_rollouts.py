@@ -24,6 +24,10 @@ the same command again continues where it stopped.
     --goals drawer_open door_left
                         only these goals of the plan
     --conditions_only   only builds the guidance conditions from the finished tasks
+    --status_minutes 2  how often a running task prints how far it is, by default every 2 minutes
+
+A goal of the plan is the path of its conditions file, or {"conditions" : path, "scale" : 1, "alpha" : 40} to change the
+guidance settings of the plan for this goal. There is no PyBullet window: --no_live_render drops it, the images stay the same.
 
 A task is one goal from one start state, like drawer_open from drawer_closed__door_left__switch_on. The goal's own joint
 starts where the goal can happen (closed for drawer_open), the other joints of the plan take every combination of their words.
@@ -44,6 +48,8 @@ RUN_SCRIPT = "run_dynaguide.py"
 JOINTS = ["sliding_door", "drawer", "switch", "green_light"] # in the order of ARTICULATED
 SHORT_NAMES = {"sliding_door" : "door", "green_light" : "led"} # for the folder names
 MAX_FAILURES_IN_A_ROW = 3 # more probably means a broken setup, like a wrong checkpoint path, so stop instead of failing every task
+GUIDANCE_SETTINGS = ["scale", "ss", "alpha"] # set for the whole plan, and each goal can override them
+QUIET_WARNING_MINUTES = 10 # run_dynaguide.py prints every 14 steps, so a longer silence means it is probably stuck
 
 
 def goal_joint(goal):
@@ -55,13 +61,24 @@ def goal_joint(goal):
     raise ValueError(f"Goal {goal} isn't a goal of an articulated joint, choose from {[name for entry in ARTICULATED for name in entry[3:]]}")
 
 
+def goal_settings(plan, goal):
+    """The conditions file and guidance settings of a goal: a goal is a path, or a dict that can override scale, ss and alpha of the plan."""
+    entry = plan["goals"][goal]
+    entry = {"conditions" : entry} if isinstance(entry, str) else entry
+    unknown = [key for key in entry if key not in ["conditions"] + GUIDANCE_SETTINGS]
+    if "conditions" not in entry or len(unknown) > 0:
+        raise ValueError(f"Goal {goal} of the plan: give a path, or a dict with 'conditions' and optionally {GUIDANCE_SETTINGS}. Unknown keys: {unknown}")
+    return {"conditions" : entry["conditions"], **{key : entry.get(key, plan[key]) for key in GUIDANCE_SETTINGS}}
+
+
 def make_tasks(plan):
     """Every (goal, start state) of the plan, in a fixed order so the seeds stay the same when a harvest continues."""
-    for key in ["joints", "goals", "n_rollouts", "horizon", "scale", "ss", "alpha", "reset_poses"]:
+    for key in ["joints", "goals", "n_rollouts", "horizon", "reset_poses"] + GUIDANCE_SETTINGS:
         if key not in plan:
             raise KeyError(f"The plan has no '{key}'")
     tasks = list()
-    for goal, conditions in plan["goals"].items():
+    for goal in plan["goals"]:
+        settings = goal_settings(plan, goal)
         joint, start_word = goal_joint(goal)
         others = [name for name in plan["joints"] if name != joint]
         for words in itertools.product(*[plan["joints"][name] for name in others]):
@@ -69,15 +86,16 @@ def make_tasks(plan):
             start[joint] = start_word
             start = {name : start[name] for name in list(plan["joints"]) + [joint] if name in start} # the order of the plan
             config = {"target_behaviors" : [goal], "env_setup" : start, "use_neg" : False,
-                      "pos_examples" : conditions, "reset_poses" : plan["reset_poses"]}
+                      "pos_examples" : settings["conditions"], "reset_poses" : plan["reset_poses"]}
             validate_experiment_config(config)
             name = "__".join(f"{SHORT_NAMES.get(joint, joint)}_{word}" for joint, word in start.items())
-            tasks.append({"goal" : goal, "start" : name, "folder" : os.path.join(goal, name), "config" : config, "seed" : len(tasks)})
+            tasks.append({"goal" : goal, "start" : name, "folder" : os.path.join(goal, name), "config" : config, "seed" : len(tasks),
+                          "guidance" : {key : settings[key] for key in GUIDANCE_SETTINGS}})
     return tasks
 
 
 def check_files(plan, args):
-    paths = list(plan["goals"].values()) + [plan["reset_poses"]] + ([] if args.dry_run or args.conditions_only else [args.agent, args.guidance])
+    paths = [goal_settings(plan, goal)["conditions"] for goal in plan["goals"]] + [plan["reset_poses"]] + ([] if args.dry_run or args.conditions_only else [args.agent, args.guidance])
     missing = [path for path in paths if path is None or not os.path.exists(path)]
     if len(missing) > 0:
         sys.exit(f"Missing files: {missing}. Paths are relative to the folder you start this from")
@@ -104,6 +122,40 @@ def set_aside(folder, args):
     print(f"  moved the unfinished earlier attempt to {target}")
 
 
+def progress(console_path, task, plan):
+    """Reads how far run_dynaguide.py got from what it printed: finished rollouts, and steps of the current one."""
+    with open(console_path, "r", errors = "replace") as f:
+        lines = f.read().splitlines()
+    finished = [line for line in lines if line.startswith("Rollout ") and " behavior: " in line]
+    reached = sum(task["goal"] in line for line in finished)
+    last_finished = max([i for i, line in enumerate(lines) if line in finished] + [-1])
+    steps = 14 * sum(line.startswith("Guidance norms") for line in lines[last_finished + 1:]) # printed every 14 steps
+    if len(finished) == 0 and steps == 0:
+        return "loading the models and the conditions"
+    return f"rollout {len(finished) + 1} / {plan['n_rollouts']} at step ~{steps} / {plan['horizon']}, goal reached {reached} / {len(finished)} so far"
+
+
+def watch(process, console_path, task, plan, args):
+    """Waits for the task, and prints a status line every status_minutes so you can tell it is still running."""
+    start = last_status = last_output = time.time()
+    last_size = 0
+    while True:
+        try:
+            return process.wait(timeout = 5)
+        except subprocess.TimeoutExpired:
+            pass
+        now = time.time()
+        size = os.path.getsize(console_path)
+        if size != last_size:
+            last_size, last_output = size, now
+        if now - last_status >= args.status_minutes * 60:
+            line = f"  [{datetime.now():%H:%M}] running for {(now - start) / 60:.0f} min: {progress(console_path, task, plan)}"
+            if now - last_output >= QUIET_WARNING_MINUTES * 60:
+                line += f". WARNING: no new output for {(now - last_output) / 60:.0f} min, look at {console_path}"
+            print(line, flush = True)
+            last_status = now
+
+
 def run_task(task, plan, args):
     """Runs one task in its own process. Returns its DONE numbers, or None if it failed."""
     folder = os.path.join(args.output_folder, task["folder"])
@@ -114,13 +166,21 @@ def run_task(task, plan, args):
 
     command = [sys.executable, RUN_SCRIPT, "--agent", args.agent, "--guidance", args.guidance, "--exp_setup_config", config_path,
                "--output_folder", folder, "--n_rollouts", str(plan["n_rollouts"]), "--horizon", str(plan["horizon"]),
-               "--scale", str(plan["scale"]), "--ss", str(plan["ss"]), "--alpha", str(plan["alpha"]), "--seed", str(args.seed + task["seed"]),
-               "--camera_names", "third_person", "--video_skip", "2", "--no_collage", "--no_live_render", "--dataset_images"]
+               "--seed", str(args.seed + task["seed"]), "--camera_names", "third_person", "--video_skip", "2",
+               "--no_collage", "--no_live_render", "--dataset_images"]
+    for key in GUIDANCE_SETTINGS:
+        command += ["--" + key, str(task["guidance"][key])]
     start = time.time()
-    with open(os.path.join(folder, "console.txt"), "w") as console:
+    console_path = os.path.join(folder, "console.txt")
+    with open(console_path, "w") as console:
         console.write(" ".join(command) + "\n\n")
         console.flush()
-        returncode = subprocess.call(command, stdout = console, stderr = subprocess.STDOUT)
+        process = subprocess.Popen(command, stdout = console, stderr = subprocess.STDOUT)
+        try:
+            returncode = watch(process, console_path, task, plan, args)
+        except KeyboardInterrupt:
+            process.kill()
+            raise
 
     logs, rollouts = glob.glob(os.path.join(folder, "*_log.json")), glob.glob(os.path.join(folder, "*_rollout.hdf5"))
     if returncode != 0 or len(logs) != 1 or len(rollouts) != 1: # run_dynaguide.py writes the log and closes the hdf5 only at the very end
@@ -246,6 +306,7 @@ if __name__ == "__main__":
     parser.add_argument("--guidance", type = str, default = None, help = "dynamics model checkpoint")
     parser.add_argument("--goals", type = str, nargs = "+", default = None, help = "only these goals of the plan")
     parser.add_argument("--seed", type = int, default = 0, help = "task i runs with seed + i")
+    parser.add_argument("--status_minutes", type = float, default = 2, help = "minutes between two status lines while a task runs")
     parser.add_argument("--dry_run", action = "store_true", help = "only list the tasks")
     parser.add_argument("--conditions_only", action = "store_true", help = "only build the conditions from the finished tasks")
     args = parser.parse_args()

@@ -46,12 +46,6 @@ You will find the scripts for processing CALVIN data in the `data_processing_cal
 Additional notes 
 - To remove individual trajectories from guidance conditions files (e.g. there's a bad segmentation), use `hdf5_filter.py`. 
 - To create guidance conditions from any recording (a CALVIN folder or your own rollouts) without the steps above, and to search for frames in a state you describe, see `Create guidance conditions.ipynb`.
-- To get more guidance conditions out of guided rollouts, use `harvest_rollouts.py`. It runs every goal of a plan (like `calvin_exp_configs_examples/harvest/articulated.json`: open and close the drawer, move the door, switch the light) from every start state of the other joints, can run unattended and continues where it stopped, and finally cuts all rollouts into one condition file per behavior. The top of the script explains the output folder. Start with `--dry_run` to see the tasks:
-
-```
-python harvest_rollouts.py --plan calvin_exp_configs_examples/harvest/articulated.json --output_folder results/harvest_articulated \
-    --agent base_policy_300.pth --guidance dynamics_model_5900.pth
-```
 - To extract initial robot states for use in experiment resets (found in the config file), use `retrieve_initial_robot_states.py`
 - To extract goal images for the goal conditioning baseline, use `generate_goal_images.py` 
 

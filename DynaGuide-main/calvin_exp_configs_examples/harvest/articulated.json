@@ -1,15 +1,15 @@
 {
-    "description" : "Every single-step goal of drawer, sliding door and switch, from each start state those three can be in. Blocks and the green light stay random.",
+    "description" : "Every single-step goal of drawer, sliding door and switch, from each start state those three can be in. Blocks and the green light stay random. Guidance settings per goal from paper_experiments/calvin_articulated_object.sh",
     "joints" : {
         "drawer" : ["closed", "open"],
         "sliding_door" : ["right", "left"],
         "switch" : ["off", "on"]
     },
     "goals" : {
-        "drawer_open" : "datasets/guidance_conditions/debug_all/drawer_open.hdf5",
-        "drawer_close" : "datasets/guidance_conditions/debug_all/drawer_close.hdf5",
+        "drawer_open" : {"conditions" : "datasets/guidance_conditions/debug_all/drawer_open.hdf5", "scale" : 1, "alpha" : 40},
+        "drawer_close" : {"conditions" : "datasets/guidance_conditions/debug_all/drawer_close.hdf5", "scale" : 1, "alpha" : 40},
         "door_left" : "datasets/guidance_conditions/debug_all/door_left.hdf5",
-        "door_right" : "datasets/guidance_conditions/debug_all/door_right.hdf5",
+        "door_right" : {"conditions" : "datasets/guidance_conditions/debug_all/door_right.hdf5", "scale" : 2, "alpha" : 15},
         "switch_on" : "guidance_condition_switch_on_20.hdf5",
         "switch_off" : "datasets/guidance_conditions/debug_all/switch_off.hdf5"
     },

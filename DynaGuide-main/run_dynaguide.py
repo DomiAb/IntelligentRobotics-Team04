@@ -407,6 +407,11 @@ def run_trained_agent(args):
         rollout_horizon = config.experiment.rollout.horizon
 
 
+    if args.no_live_render and sys.platform != "linux":
+        # use_egl=true of the checkpoint opens a PyBullet window outside Linux. The images come from the CPU renderer with or
+        # without it (checked pixel for pixel), so the window only shows the scene and can go
+        ckpt_dict["env_metadata"]["env_kwargs"]["use_egl"] = False
+
     env, _ = FileUtils.env_from_checkpoint(
         ckpt_dict=ckpt_dict,
         env_name=args.env,
@@ -595,7 +600,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no_live_render",
         action='store_true',
-        help="(optional) stop redrawing the PyBullet window to save time. The saved video and the images of the policy stay the same",
+        help="(optional) no PyBullet window, to save time. The saved video and the images of the policy stay the same",
     )
 
     parser.add_argument(
