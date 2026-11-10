@@ -8,6 +8,9 @@
         "switch": "off"
     },
     "use_neg": false,
-    "pos_examples": "datasets/guidance_conditions/debug_all/button_on.hdf5",
+    "pos_examples": [
+        "datasets/guidance_conditions/recombined_debug/button_on/drawer_closed__door_*__switch_off__green_light_on.hdf5",
+        "datasets/guidance_conditions/recombined_debug_no_blocks/button_on/drawer_closed__door_*__switch_off__green_light_on.hdf5"
+    ],
     "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
 }

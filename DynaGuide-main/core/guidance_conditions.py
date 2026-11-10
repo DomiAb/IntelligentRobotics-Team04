@@ -140,7 +140,7 @@ MOTION_EPSILON = 0.001
 MIN_MOTION_STEPS = 10
 MIN_SEGMENT_LENGTH = 16
 BLOCK_TOUCH_DISTANCE = 0.05
-JOINT_INDEX = {"sliding_door" : 0, "drawer" : 1, "switch" : 3, "green_light" : 5}
+JOINT_INDEX = {"sliding_door" : 0, "drawer" : 1, "button" : 2, "switch" : 3, "green_light" : 5}
 
 
 def _parts(state):
@@ -223,6 +223,9 @@ JOINT_WORDS = {"sliding_door" : ("right", "left"), "drawer" : ("closed", "open")
 # what the words mean: the thresholds of the behaviors, in the same order as JOINT_INDEX
 JOINT_WORD_RANGES = {name : {JOINT_WORDS[name][0] : (-math.inf, low), JOINT_WORDS[name][1] : (high, math.inf)}
                      for name, (_, low, high, _, _) in zip(["sliding_door", "drawer", "switch", "green_light"], ARTICULATED)}
+# the button springs back by itself and has no behavior threshold. Fully pressed is about 0.027, the green light toggles at about 0.005,
+# from 0.015 every press of the debug set is near its deepest point
+JOINT_WORD_RANGES["button"] = {"released" : (-math.inf, 0.002), "pressed" : (0.015, math.inf)}
 
 BLOCK_POSITION = {"red" : 6, "blue" : 12, "pink" : 18}
 BLOCK_REST_Z = (0.362, 0.46) # resting in the drawer, or on the table and in the cabinet
@@ -274,6 +277,7 @@ def find_frames(recording, where):
     """
     Returns a mask of the frames that match all of this description. See calvin_exp_configs_examples/guidance_goals for an example.
     - sliding_door, drawer, switch, green_light: the words of env_setup, or a range [low, high]
+    - button: pressed or released, or a range [low, high]
     - blocks: {"red" : "drawer"} with one of drawer, table, cabinet, cabinet_left, cabinet_right, held, lifted
     - tcp_near: drawer_handle, door_handle, switch, button, a block color or [x, y, z]. tcp_radius is how close, 0.08 by default
     - gripper: open or closed

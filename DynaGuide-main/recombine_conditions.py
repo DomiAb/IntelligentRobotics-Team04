@@ -20,8 +20,10 @@ at the goal, and renders it again with every combination of the other joints. Se
 
     python recombine_conditions.py --output_folder datasets/guidance_conditions/recombined_debug
 
-By default this takes the drawer, door and switch conditions of datasets/guidance_conditions/debug_all. Pass others with
---conditions, any condition file whose behavior is one of drawer_open, drawer_close, door_left, door_right, switch_on, switch_off.
+By default this takes the drawer, door and switch conditions of datasets/guidance_conditions/debug_all, and the button presses of
+datasets/guidance_conditions/button_pressed (made with calvin_exp_configs_examples/guidance_goals/button_pressed.json). Pass others with
+--conditions, any condition file whose behavior is one of drawer_open, drawer_close, door_left, door_right, switch_on, switch_off,
+button_on, button_off. For button_on / button_off the green light is set on / off, the robot and the button stay as recorded.
 
 What changes and what doesn't, for each condition (its last frame, which is what the guidance uses):
 - the robot, its action and the joint of the goal stay as they are, like the drawer in a drawer_open condition
@@ -45,14 +47,16 @@ other and with what the policy sees in the simulator, but differ slightly from t
 REPO_FOLDER = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ENV_CONFIG = os.path.join(REPO_FOLDER, "configs", "calvin.json")
 DEFAULT_CONDITIONS = [os.path.join("datasets", "guidance_conditions", "debug_all", f"{goal}.hdf5")
-                      for goal in ["drawer_open", "drawer_close", "door_left", "door_right", "switch_on", "switch_off"]]
+                      for goal in ["drawer_open", "drawer_close", "door_left", "door_right", "switch_on", "switch_off"]] \
+                   + [os.path.join("datasets", "guidance_conditions", "button_pressed", f"{goal}.hdf5") for goal in ["button_on", "button_off"]]
 
 STATE_INDEX = {"sliding_door" : 0, "drawer" : 1, "switch" : 3, "green_light" : 5}
 LIGHTBULB_INDEX = 4
 ANCHOR = {"sliding_door" : "door_handle", "drawer" : "drawer_handle", "switch" : "switch", "green_light" : "button"} # where the gripper holds the joint, the button toggles the green light
 SHORT_NAMES = {"sliding_door" : "door"} # for the file names
-GOALS = {(rising if end == "high" else falling) : (joint, end) for joint, (_, _, _, rising, falling) in zip(["sliding_door", "drawer", "switch"], ARTICULATED)
+GOALS = {(rising if end == "high" else falling) : (joint, end) for joint, (_, _, _, rising, falling) in zip(["sliding_door", "drawer", "switch", "green_light"], ARTICULATED)
          for end in ["high", "low"]}
+LAMPS = ["green_light"] # nothing touches a lamp, so as the goal's joint it is set to the goal's end state, like on for button_on
 PENETRATION_TOLERANCE = 0.002 # deeper than the condition already had, in meters, counts as inside
 DRAWER_BLOCK = dict(x = (0.0, 0.36), z_below = 0.40) # a block this low inside the drawer's x range sits in the drawer
 
@@ -160,6 +164,10 @@ def recombine(sim, seed, combination, frozen):
     before = sim.contacts()
 
     states = seed["states"].copy()
+    goal_joint, end = GOALS[seed["behavior"]]
+    if goal_joint in LAMPS: # a press that switched the light off shows the same robot and button as one that switched it on
+        words = STATE_WORDS[goal_joint]
+        states[STATE_INDEX[goal_joint]] = words[max(words, key = words.get) if end == "high" else min(words, key = words.get)]
     for joint, word in combination.items():
         if joint not in frozen:
             states[STATE_INDEX[joint]] = STATE_WORDS[joint][word]
@@ -264,7 +272,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_folder", type = str, required = True, help = "new folder for the results")
     parser.add_argument("--conditions", type = str, nargs = "+", default = DEFAULT_CONDITIONS, help = "condition files to take the robot from")
-    parser.add_argument("--joints", type = str, nargs = "+", default = list(STATE_INDEX), help = "joints to combine, the goal's own joint never changes")
+    parser.add_argument("--joints", type = str, nargs = "*", default = list(STATE_INDEX), help = "joints to combine, the goal's own joint never changes. "
+                        "Without any, each condition is only rendered again in its own scene")
     parser.add_argument("--near_radius", type = float, default = 0.1, help = "a joint whose handle is this close to the gripper, in meters, doesn't move")
     parser.add_argument("--hide_blocks", action = "store_true", help = "no blocks in any image, they are parked outside the camera view")
     parser.add_argument("--env_config", type = str, default = DEFAULT_ENV_CONFIG, help = "environment config")

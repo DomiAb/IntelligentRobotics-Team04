@@ -1,0 +1,7 @@
+{
+    "description" : "The robot pressing the button down, one frame per press near its deepest point, whatever the green light did. The same frames twice, named button_on and button_off, so recombine_conditions.py sets the green light on in the one and off in the other",
+    "goals" : [
+        {"name" : "button_on", "where" : {"button" : "pressed", "tcp_near" : "button"}},
+        {"name" : "button_off", "where" : {"button" : "pressed", "tcp_near" : "button"}}
+    ]
+}
