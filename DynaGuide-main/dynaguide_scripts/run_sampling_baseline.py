@@ -27,6 +27,9 @@ from robomimic.algo import RolloutPolicy
 from robomimic.scripts.playback_dataset import DEFAULT_CAMERAS
 import random 
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from core.calvin_utils import generate_reset_state
 from core.dynamics_models import FinalStatePredictionDino
 

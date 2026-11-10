@@ -36,7 +36,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=drawer_dont_open_$count
     exp_setup_config=yourconfigdirectory/drawer_dont_open_positives.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=4 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=4 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha 30 &
@@ -45,7 +45,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=door_dont_right_$count
     exp_setup_config=yourconfigdirectory/door_dont_right_positives.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=4 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=4 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha 30 &
@@ -54,7 +54,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=drawer_dont_open_door_dont_right_$count
     exp_setup_config=yourconfigdirectory/drawer_dont_open_door_dont_right_positives.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=1 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1 --ss 4 --alpha 40 & 
@@ -64,7 +64,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=door_left_button_on_$count
     exp_setup_config=yourconfigdirectory/door_left_button_on_negs.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=2 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=2 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1 --ss 4 --alpha 40 & 
@@ -73,7 +73,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=button_on_switch_on_$count
     exp_setup_config=yourconfigdirectory/button_on_switch_on_negs.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=5 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=5 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1 --ss 4 --alpha 30 & 
@@ -82,7 +82,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=switch_on_door_left_button_on_$count
     exp_setup_config=yourconfigdirectory/switch_on_door_left_button_on_negs.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=3 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=3 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1 --ss 4 --alpha 30 & 
@@ -103,7 +103,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=drawer_dont_open_planner_$count
     exp_setup_config=yourconfigdirectory/drawer_dont_open_positives.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=1 python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts 50 \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &
@@ -112,7 +112,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=door_dont_right_planner_$count
     exp_setup_config=yourconfigdirectory/door_dont_right_positives.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=1 python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts 50 \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &
@@ -121,7 +121,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=drawer_dont_open_door_dont_right_planner_$count
     exp_setup_config=yourconfigdirectory/drawer_dont_open_door_dont_right_positives.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=2 python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=2 python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts 50 \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &
@@ -130,7 +130,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=door_left_button_on_planner_$count
     exp_setup_config=yourconfigdirectory/door_left_button_on_negs.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=2 python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=2 python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts 50 \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &
@@ -139,7 +139,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=button_on_switch_on_planner_$count
     exp_setup_config=yourconfigdirectory/button_on_switch_on_negs.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=3 python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=3 python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts 50 \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &
@@ -148,7 +148,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=switch_on_door_left_button_on_planner_$count
     exp_setup_config=yourconfigdirectory/switch_on_door_left_button_on_negs.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=3 python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=3 python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts 50 \
         --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &

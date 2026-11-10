@@ -1,6 +1,6 @@
 """
 Use this script to score a saved CALVIN rollout file against the goals of an experiment config, without running the rollouts again.
-python evaluate_behaviors.py \
+python dynaguide_scripts/evaluate_behaviors.py \
     --dataset results/my_run \
     --config calvin_exp_configs_examples/switch_on.json \
     --output results/behaviors.json
@@ -10,6 +10,9 @@ import argparse
 import glob
 import json
 import os
+
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
 
 from core.calvin_behaviors import evaluate_dataset
 

@@ -15,6 +15,9 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 import time 
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from core.dynamics_models import FinalStatePredictionDino, FinalStatePredictionDinoCLS
 from core.embedder_datasets import MultiviewDataset
 

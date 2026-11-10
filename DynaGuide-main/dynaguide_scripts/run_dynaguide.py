@@ -35,6 +35,9 @@ import random
 import cv2 
 import matplotlib.pyplot as plt 
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 # these are the core modules that create the dynaguide behavior 
 from core.dynamics_models import FinalStatePredictionDino
 from core.embedder_datasets import MultiviewDataset

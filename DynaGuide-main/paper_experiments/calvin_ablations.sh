@@ -29,7 +29,7 @@ exp_root="add your experiment root here"
 #     echo "On checkpoint $ckpt_dir"
 #     run_name=Control_$count
 #     output_folder=$exp_root$run_name
-#     CUDA_VISIBLE_DEVICES=1 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+#     CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
 #         --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
 #         --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
 #         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 0 --ss 1 & 
@@ -118,7 +118,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=examples_${examples}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=0 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=0 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha 30 --max_examples $examples &
@@ -129,7 +129,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=examples_${examples}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=1 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha 30 --max_examples $examples &
@@ -150,7 +150,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=TESTalpha_${alpha}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=0 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=0 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha $alpha &
@@ -161,7 +161,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=alpha_${alpha}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=1 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha $alpha &
@@ -180,7 +180,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=scale_${scale}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=0 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=0 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale $scale --ss 4 --alpha 30 &
@@ -191,7 +191,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=scale_${scale}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=1 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=1 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale $scale --ss 4 --alpha 30 &
@@ -202,7 +202,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=scale_${scale}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=5 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=5 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale $scale --ss 4 --alpha 30 &
@@ -221,7 +221,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=ss_s3_${ss_val}_$count
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=2 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=2 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 3 --ss $ss_val --alpha 30 &
@@ -237,7 +237,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=no_noise_pretrain_$count
     exp_setup_config=yourconfigdirectory/switch_on.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=7 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=7 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance /store/real/maxjdu/repos/robotrainer/results/classifiers/CALVINABCD_blockseg_newmodel_8head_6_depth_NOISED_wproprio_NoNoise/5900.pth \
@@ -252,7 +252,7 @@ for ckpt_dir in "${base_policies[@]}"; do
     run_name=noise_pretrain_$count
     exp_setup_config=yourconfigdirectory/switch_on.json
     output_folder=$exp_root$run_name
-    CUDA_VISIBLE_DEVICES=7 python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+    CUDA_VISIBLE_DEVICES=7 python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
         --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
         --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
         --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha 30 &

@@ -21,7 +21,7 @@ The core of DynaGuide is found in the `core/` folder in this directory. Experime
 
 The modified Calvin environment can be installed from the `Calvin/` folder, and the diffusion policy can be installed from the `robomimic/` folder. For more details, refer to the next section. 
 
-The experiment code can be found in the main directory here
+The experiment code can be found in `dynaguide_scripts/`. Run the scripts from this directory (`DynaGuide-main`), e.g. `python dynaguide_scripts/run_dynaguide.py ...`, since the configs use paths relative to it
 - `analyze_calvin_touch.py`: the code that looks at the DynaGuide results and gives statistics on individual behaviors; this code is repeated with modifications in the figure generation folder. 
 - `run_dynaguide.py`: the code that evaluates dynaguide and records the data for analysis. It also runs the base policy directly and goal conditioned policies. 
 - `run_sampling_baseline.py`: the code that runs the baseline where the base policy is sampled multiple times and the best action is kept 
@@ -68,17 +68,17 @@ python train.py --config configs/diffusion_policy_image_calvin_ddim.json \
 The dynamics model is trained using this DynaGuide codebase. For the calvin environment, you can train the model with this configuration: 
 
 ```
-python train_dynaguide.py --exp_dir directory_to_save_dynamics_model \
+python dynaguide_scripts/train_dynaguide.py --exp_dir directory_to_save_dynamics_model \
     --train_hdf5 your_calvin_dynamics_dataset  \
     --test_hdf5 your_calvin_validation_dataset \
     --cameras third_person --action_dim 7 --proprio_key proprio --proprio_dim 15 \
     --num_epochs 6000 --action_chunk_length 16 --batch_size 16 
 ```
 
-To test the model, `test_dynaguide.py` contains a set of visualizations to analyze the ability for the dynamics model to predict the future and take actions into account. To run these tests, use this configuation: 
+To test the model, `dynaguide_scripts/test_dynaguide_embedding.py` contains a set of visualizations to analyze the ability for the dynamics model to predict the future and take actions into account. To run these tests, use this configuation: 
 
 ```
-python test_dynaguide_embedding.py --exp_dir directory_of_dynamics_model \
+python dynaguide_scripts/test_dynaguide_embedding.py --exp_dir directory_of_dynamics_model \
      --good_hdf5 single_target_behavior_h5_file \
      --mixed_hdf5 mixed_behavior_test_h5_file  \
      --checkpoint path_to_dynamics_model_checkpoint  \
@@ -140,14 +140,14 @@ An unknown key or place, overlapping blocks, or a goal that can't be scored from
 To check a config without running a policy, render a set of resets. The results go into a new folder inside `results/reset_previews`, or inside `--output_folder` if you pass one. `resets_start.png` and `resets_settled.png` show the resets from the camera of the policy. Resets where a block falls, shifts, intersects another block or touches the robot get a red border and are listed in `report.json`:
 
 ```
-python preview_resets.py --config calvin_exp_configs_examples/reset_layouts/blocks_in_all_places.json
+python dynaguide_scripts/preview_resets.py --config calvin_exp_configs_examples/reset_layouts/blocks_in_all_places.json
 ```
 
 ## Running DynaGuide
 To run DynaGuide, you need 1) the experiment config file 2) trained base policy 3) trained dynamics model and 4) guidance conditions (h5 files). Once you have these components, you can run `run_dynaguide.py` using the following code:
 
 ```
-python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
     --dataset_path output_hdf5_path --dataset_obs --json_path output_json_path --horizon 400 --n_rollouts 100 \
     --agent checkpoint_dir --output_folder output_folder --video_skip 2  \
     --exp_setup_config exp_config_path --guidance dynamics_model_path \
@@ -181,7 +181,7 @@ output_folder=results/$run_name
 checkpoint_dir=path_to_base_policy
 exp_setup_config=calvin_exp_configs_examples/switch_on.json
 embedder=path_to_embedder
-python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
     --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts 100 \
     --agent $checkpoint_dir --output_folder $output_folder --video_skip 2  \
     --exp_setup_config $exp_setup_config --guidance $embedder --camera_names third_person --scale 1.5 --ss 4 --alpha 30 --save_frames
@@ -195,7 +195,7 @@ output_folder=results/$run_name
 checkpoint_dir=path_to_base_policy
 exp_setup_config=calvin_exp_configs_examples/switch_off.json
 embedder=path_to_embedder
-python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
     --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts 100 \
     --agent $checkpoint_dir --output_folder $output_folder --video_skip 2  \
     --exp_setup_config $exp_setup_config --guidance $embedder --camera_names third_person --scale 0 --ss 1  --save_frames

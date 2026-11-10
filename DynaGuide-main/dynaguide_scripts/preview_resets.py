@@ -11,6 +11,9 @@ import cv2
 import numpy as np
 
 from calvin_env.envs.play_table_env import PlayTableSimEnv
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from core.calvin_behaviors import BLOCK_MOVED, validate_experiment_config
 from core.calvin_utils import BLOCK_INDEX, generate_reset_state
 
@@ -25,12 +28,12 @@ Everything goes into a new folder <output_folder>/<config name>_<date and time>:
 - report.json: the start state, the checks and the movement of everything in each reset
 
 Example, run from DynaGuide-main:
-    python preview_resets.py --config calvin_exp_configs_examples/reset_layouts/blocks_in_all_places.json
+    python dynaguide_scripts/preview_resets.py --config calvin_exp_configs_examples/reset_layouts/blocks_in_all_places.json
 The exit code is 1 if a check failed.
 """
 
-REPO_FOLDER = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_ENV_CONFIG = os.path.join(REPO_FOLDER, "..", "configs", "calvin.json")
+REPO_FOLDER = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # DynaGuide-main, the scripts are in dynaguide_scripts
+DEFAULT_ENV_CONFIG = os.path.join(REPO_FOLDER, "configs", "calvin.json")
 DEFAULT_OUTPUT_FOLDER = os.path.join(REPO_FOLDER, "results", "reset_previews")
 
 JOINTS = {"sliding_door" : 0, "drawer" : 1, "switch" : 3} # index in the lowdim state. They shouldn't move by themselves

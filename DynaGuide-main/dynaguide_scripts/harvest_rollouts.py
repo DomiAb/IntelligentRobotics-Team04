@@ -9,6 +9,9 @@ import sys
 import time
 from datetime import datetime
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from core.calvin_behaviors import ARTICULATED, validate_experiment_config
 from core.calvin_utils import STATE_WORDS
 
@@ -17,7 +20,7 @@ Runs guided rollouts for every goal of a plan from every start state, to get mor
 Meant to run unattended: each task is its own run_dynaguide.py process, a failed task doesn't stop the others, and starting
 the same command again continues where it stopped.
 
-    python harvest_rollouts.py --plan calvin_exp_configs_examples/harvest/articulated.json \
+    python dynaguide_scripts/harvest_rollouts.py --plan calvin_exp_configs_examples/harvest/articulated.json \
         --output_folder results/harvest_articulated --agent base_policy_300.pth --guidance dynamics_model_5900.pth
 
     --dry_run           only lists the tasks and checks the plan
@@ -44,7 +47,7 @@ The output folder:
     conditions_<time>/              guidance conditions cut from all finished rollouts, see "Create guidance conditions.ipynb"
 """
 
-RUN_SCRIPT = "run_dynaguide.py"
+RUN_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_dynaguide.py") # next to this script
 JOINTS = ["sliding_door", "drawer", "switch", "green_light"] # in the order of ARTICULATED
 SHORT_NAMES = {"sliding_door" : "door", "green_light" : "led"} # for the folder names
 MAX_FAILURES_IN_A_ROW = 3 # more probably means a broken setup, like a wrong checkpoint path, so stop instead of failing every task

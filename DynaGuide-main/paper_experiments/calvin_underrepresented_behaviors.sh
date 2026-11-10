@@ -35,7 +35,7 @@ count=0
 for dataset in "${datasets[@]}"; do
     python split_train_val.py --dataset $dataset --ratio 0.03
     output_name=calvin_door_left_gc_${splits[$count]}_percent
-    CUDA_VISIBLE_DEVICES=4 python train_base_policy.py --config configs/diffusion_policy_image_calvin_ddim.json --dataset $dataset --output $base_folder  --name $output_name &
+    CUDA_VISIBLE_DEVICES=4 python dynaguide_scripts/train_base_policy.py --config configs/diffusion_policy_image_calvin_ddim.json --dataset $dataset --output $base_folder  --name $output_name &
 
     echo $output_name
     ((count++))
@@ -66,7 +66,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=switch_on_${splits[$count]}_$i
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=$gpudevice python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=$gpudevice python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 1.5 --ss 4 --alpha 30 &
@@ -84,7 +84,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=switch_on_control_${splits[$count]}_$i
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=$gpudevice python run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=$gpudevice python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $exp_root$run_name/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 400 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $exp_root/$run_name --video_skip 2  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --scale 0 --ss 1 --alpha 30 &
@@ -101,7 +101,7 @@ for ckpt_dir in "${base_policies[@]}"; do
         run_name=switch_on_planner_${splits[$count]}_$i
         exp_setup_config=yourconfigdirectory/switch_on.json
         output_folder=$exp_root$run_name
-        CUDA_VISIBLE_DEVICES=$gpudevice python run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
+        CUDA_VISIBLE_DEVICES=$gpudevice python dynaguide_scripts/run_sampling_baseline.py  --video_path $output_folder/$run_name.mp4 \
             --dataset_path $output_folder/$run_name.hdf5 --dataset_obs --json_path $output_folder/$run_name.json --horizon 200 --n_rollouts $num_trials \
             --agent $ckpt_dir --output_folder $output_folder --video_skip 5  \
             --exp_setup_config $exp_setup_config --guidance $dynamics_model --camera_names third_person --num_samples 5 &

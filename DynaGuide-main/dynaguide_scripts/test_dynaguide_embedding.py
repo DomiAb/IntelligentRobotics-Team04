@@ -4,6 +4,9 @@ import torch
 import tqdm 
 import numpy as np 
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from core.dynamics_models import FinalStatePredictionDino
 
 from core.embedder_datasets import MultiviewDataset
