@@ -1,0 +1,16 @@
+{
+    "target_behaviors": [
+        "drawer_close"
+    ],
+    "env_setup": {
+        "drawer": "open",
+        "switch": "off",
+        "green_light": "off"
+    },
+    "use_neg": false,
+    "pos_examples": [
+        "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
+        "datasets/guidance_conditions/recombined_debug_no_blocks/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5"
+    ],
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

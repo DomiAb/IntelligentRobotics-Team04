@@ -40,8 +40,8 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 
 # these are the core modules that create the dynaguide behavior 
 from core.dynamics_models import FinalStatePredictionDino
-from core.embedder_datasets import MultiviewDataset
-from core.calvin_utils import generate_reset_state
+from core.embedder_datasets import load_conditions
+from core.calvin_utils import condition_files, generate_reset_state
 from core.calvin_behaviors import make_tracker, validate_experiment_config, summarize_behaviors
 from core.dynaguide import calculate_classifier_guidance, calculate_position_guidance
 
@@ -370,20 +370,23 @@ def run_trained_agent(args):
         with open(args.exp_setup_config, "r") as f:
             exp_setup_config = json.load(f)
         validate_experiment_config(exp_setup_config) # catch a typo in the config before spending time on rollouts
+        for key in ["pos_examples"] + (["neg_examples"] if exp_setup_config["use_neg"] else []):
+            if exp_setup_config[key] is not None:
+                condition_files(exp_setup_config[key]) # a missing file stops here, not after loading the conditions
 
     # ensure backward compatibility 
     good_dataset_path = args.good_states if args.exp_setup_config is None else exp_setup_config["pos_examples"]
     good_dataset = None 
     if exp_setup_config["pos_examples"] is not None:
-        good_dataset = MultiviewDataset(good_dataset_path, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, \
-                                        padding = padding, pad_mode = pad_mode, proprio = proprio)
+        good_dataset = load_conditions(good_dataset_path, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, \
+                                       padding = padding, pad_mode = pad_mode, proprio = proprio) # one file or several
     
     bad_dataset = None 
     if exp_setup_config["use_neg"]:
         bad_dataset_path = exp_setup_config["neg_examples"]
 
-        bad_dataset = MultiviewDataset(bad_dataset_path, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, \
-                                        padding = padding, pad_mode = pad_mode, proprio = proprio)
+        bad_dataset = load_conditions(bad_dataset_path, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, \
+                                      padding = padding, pad_mode = pad_mode, proprio = proprio)
     
     if args.direct_position_guidance:
         classifier_grad, good_embeddings, bad_embeddings = calculate_position_guidance(exp_setup_config["loc_target"], args.scale)

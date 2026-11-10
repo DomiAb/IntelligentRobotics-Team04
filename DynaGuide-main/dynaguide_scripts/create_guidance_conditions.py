@@ -3,17 +3,21 @@ import json
 import os
 import sys
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from core.guidance_conditions import build_behavior_conditions, build_goal_conditions, read_recordings
 
 """
 Creates guidance conditions from recorded data, see "Create guidance conditions.ipynb" for how to use it.
 Each condition file works as pos_examples or neg_examples in an experiment config.
+Run it from DynaGuide-main, the paths are relative to it.
 
 One file per behavior, cut from the recordings:
-    python create_guidance_conditions.py --recordings datasets/calvin_debug_dataset/validation --output_folder datasets/guidance_conditions/debug_validation
+    python dynaguide_scripts/create_guidance_conditions.py --recordings datasets/calvin_debug_dataset/validation --output_folder datasets/guidance_conditions/debug_validation
 
 One file per goal of a goals file, found by a description of the state:
-    python create_guidance_conditions.py --recordings datasets/calvin_debug_dataset/validation --goals calvin_exp_configs_examples/guidance_goals/drawer_door_block.json \
+    python dynaguide_scripts/create_guidance_conditions.py --recordings datasets/calvin_debug_dataset/validation --goals calvin_exp_configs_examples/guidance_goals/drawer_door_block.json \
         --output_folder datasets/guidance_conditions/my_goals
 
 --recordings takes CALVIN folders and hdf5 files, also mixed, like the rollouts of run_dynaguide.py with --dataset_images.

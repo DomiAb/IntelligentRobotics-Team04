@@ -1,5 +1,7 @@
+import glob
 import math
 import numpy as np
+import os
 import random
 from collections import namedtuple
 
@@ -261,3 +263,20 @@ def check_state_difference(start_state, state, robot_pos, binaries, for_display 
     
 
     return False 
+
+def condition_files(spec):
+    """
+    The guidance condition files of pos_examples or neg_examples: one path, or a list of paths. Each path can be a pattern with *,
+    like "datasets/guidance_conditions/recombined_debug/drawer_open/*.hdf5". Returns every file in the order given, each file once.
+    Paths are relative to the folder you run from. Raises an error if a path or pattern finds no file.
+    """
+    entries = [spec] if isinstance(spec, str) else spec
+    if not isinstance(entries, list) or len(entries) == 0 or not all(isinstance(entry, str) for entry in entries):
+        raise ValueError(f"Guidance conditions must be a path or a list of paths, got {spec}")
+    files = list()
+    for entry in entries:
+        matches = sorted(glob.glob(entry)) if any(c in entry for c in "*?[") else [entry] if os.path.isfile(entry) else []
+        if len(matches) == 0:
+            raise FileNotFoundError(f"No guidance condition file found for {entry}, paths are relative to {os.getcwd()}")
+        files += [match for match in matches if match not in files]
+    return files

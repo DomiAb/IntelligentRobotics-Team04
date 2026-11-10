@@ -129,3 +129,31 @@ class MultiviewDataset(Dataset):
             selected_actions[-amount_to_pad:] = selected_demo["actions"][-1]
 
         return selected_state, selected_actions, label
+
+class ConditionSet:
+    """
+    Several guidance condition files used as one, for pos_examples / neg_examples with a list of files. Offers what
+    calculate_classifier_guidance reads from a MultiviewDataset: lengths_list and get_labeled_item over all files in a row.
+    """
+    def __init__(self, files, **dataset_kwargs):
+        self.files = files
+        self.datasets = [MultiviewDataset(path, **dataset_kwargs) for path in files]
+        self.lengths_list = [length for dataset in self.datasets for length in dataset.lengths_list]
+
+    def __len__(self):
+        return sum(self.lengths_list)
+
+    def get_labeled_item(self, idx):
+        for dataset in self.datasets:
+            if idx < len(dataset):
+                return dataset.get_labeled_item(idx)
+            idx -= len(dataset)
+        raise IndexError(idx)
+
+
+def load_conditions(spec, **dataset_kwargs):
+    """The conditions of pos_examples or neg_examples, see condition_files in core/calvin_utils.py for what spec can be."""
+    from core.calvin_utils import condition_files
+    files = condition_files(spec)
+    print(f"Guidance conditions from {len(files)} file(s):" + "".join(f"\n    {path}" for path in files))
+    return MultiviewDataset(files[0], **dataset_kwargs) if len(files) == 1 else ConditionSet(files, **dataset_kwargs)
