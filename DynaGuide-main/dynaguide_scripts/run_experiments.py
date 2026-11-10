@@ -12,7 +12,7 @@ from rollout_tasks import GUIDANCE_SETTINGS, add_arguments, check_files, guidanc
 Runs a set of experiments unattended: each experiment config with each of its sets of guidance conditions, and the base policy
 without guidance to compare. Starting the same command again continues where it stopped.
 
-    python dynaguide_scripts/run_experiments.py --plan calvin_exp_configs_examples/experiments/plan_first_articulated.json \
+    python dynaguide_scripts/run_experiments.py --plan calvin_exp_configs_examples/experiments/plan_first_articulated_1.json \
         --output_folder results/experiments_first --agent base_policy_300.pth --guidance dynamics_model_5900.pth
 
     --dry_run                   only lists the tasks and checks the plan and all files
@@ -27,8 +27,10 @@ The plan:
     experiments                 name : {"config" : experiment config, "conditions" : {variant : conditions}, "scale" : ..., ...}
                                 Each variant replaces pos_examples of the config: a path, a list of paths, or patterns with *.
                                 Without "conditions", the config's own pos_examples is the only variant, called "guided"
+                                "seed" : n is optional, by default the experiment's position in the plan (0, 1, ...)
 
 All tasks of one experiment get the same seed, so the variants and the base policy start from the same scenes and robot poses.
+A plan split over several machines keeps its seeds by setting "seed" in each part.
 
 The output folder:
     plan.json                   the plan of this run, a different plan can't continue in this folder
@@ -39,7 +41,7 @@ The output folder:
 Running the tasks is shared with harvest_rollouts.py, see rollout_tasks.py.
 """
 
-EXPERIMENT_KEYS = ["config", "conditions"] + GUIDANCE_SETTINGS
+EXPERIMENT_KEYS = ["config", "conditions", "seed"] + GUIDANCE_SETTINGS
 BASE_POLICY = "base_policy"
 
 
@@ -61,11 +63,12 @@ def make_tasks(plan):
         variants = entry.get("conditions", {"guided" : config["pos_examples"]})
         if BASE_POLICY in variants:
             raise ValueError(f"Experiment {name}: '{BASE_POLICY}' is the name of the run without guidance, call the variant differently")
+        seed = entry.get("seed", number)
         for variant, conditions in variants.items():
-            tasks.append({"folder" : f"{name}/{variant}", "config" : {**config, "pos_examples" : conditions}, "seed" : number,
+            tasks.append({"folder" : f"{name}/{variant}", "config" : {**config, "pos_examples" : conditions}, "seed" : seed,
                           "guidance" : guidance, "targets" : targets, "columns" : {"experiment" : name, "variant" : variant}})
         if plan.get("base_policy", False): # the guidance code still needs conditions to load, with scale 0 they have no effect
-            tasks.append({"folder" : f"{name}/{BASE_POLICY}", "config" : config, "seed" : number,
+            tasks.append({"folder" : f"{name}/{BASE_POLICY}", "config" : config, "seed" : seed,
                           "guidance" : {"scale" : 0, "ss" : 1, "alpha" : guidance["alpha"]}, "targets" : targets,
                           "columns" : {"experiment" : name, "variant" : BASE_POLICY}})
     return tasks

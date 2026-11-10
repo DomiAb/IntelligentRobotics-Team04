@@ -9,6 +9,9 @@ import cv2
 import h5py
 import numpy as np
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
+
 from calvin_env.envs.play_table_env import PlayTableSimEnv
 from core.calvin_behaviors import ARTICULATED
 from core.calvin_utils import BLOCK_INDEX, HIDDEN_POS, STATE_WORDS
@@ -18,7 +21,9 @@ from core.guidance_conditions import Recording, Segment, _anchor_position, save_
 Makes more guidance conditions out of few: puts the robot of each existing condition back into the simulator exactly as it was
 at the goal, and renders it again with every combination of the other joints. See section 6 of "Create guidance conditions.ipynb".
 
-    python recombine_conditions.py --output_folder datasets/guidance_conditions/recombined_debug
+    python dynaguide_scripts/recombine_conditions.py --output_folder datasets/guidance_conditions/recombined_debug
+
+Run it from DynaGuide-main, the paths are relative to it. dynaguide_scripts/make_guidance_conditions.bat runs the whole chain on Windows.
 
 By default this takes the drawer, door and switch conditions of datasets/guidance_conditions/debug_all, and the button presses of
 datasets/guidance_conditions/button_pressed (made with calvin_exp_configs_examples/guidance_goals/button_pressed.json). Pass others with
@@ -44,7 +49,7 @@ All images come from the simulator, also for the combination the condition alrea
 other and with what the policy sees in the simulator, but differ slightly from the original images of the CALVIN data, which used EGL.
 """
 
-REPO_FOLDER = os.path.dirname(os.path.abspath(__file__))
+REPO_FOLDER = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # DynaGuide-main, the scripts are in dynaguide_scripts
 DEFAULT_ENV_CONFIG = os.path.join(REPO_FOLDER, "configs", "calvin.json")
 DEFAULT_CONDITIONS = [os.path.join("datasets", "guidance_conditions", "debug_all", f"{goal}.hdf5")
                       for goal in ["drawer_open", "drawer_close", "door_left", "door_right", "switch_on", "switch_off"]] \
