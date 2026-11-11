@@ -20,3 +20,5 @@ evaluation/
 *.mp4
 !pictures/*.mp4
 .DS_Store
+video/
+videos/

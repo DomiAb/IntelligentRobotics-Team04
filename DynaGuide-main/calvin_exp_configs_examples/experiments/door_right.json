@@ -4,14 +4,13 @@
     ],
     "env_setup": {
         "sliding_door": "left",
-        "drawer": "closed",
         "switch": "off",
         "green_light": "off"
     },
     "use_neg": false,
     "pos_examples": [
-        "datasets/guidance_conditions/recombined_debug/door_right/drawer_closed__door_right__switch_off__green_light_off.hdf5",
-        "datasets/guidance_conditions/recombined_debug_no_blocks/door_right/drawer_closed__door_right__switch_off__green_light_off.hdf5"
+        "datasets/guidance_conditions/recombined_debug/door_right/drawer_*__door_right__switch_off__green_light_off.hdf5",
+        "datasets/guidance_conditions/recombined_debug_no_blocks/door_right/drawer_*__door_right__switch_off__green_light_off.hdf5"
     ],
     "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_midpoint.json"
 }

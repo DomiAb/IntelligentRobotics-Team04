@@ -1,5 +1,5 @@
 {
-    "description": "door_left, 5 tasks: 4 guided and 1 base policy. Start: door right, closed drawer, switch off, green light off. Conditions with blocks, without, both, and the unchanged debug_all file. Seed 4 for door_left and 5 for door_right, after those of plans 1 to 3. Guidance settings and reset poses from paper_experiments/calvin_articulated_object.sh and calvin_exp_configs_examples/door_left.json",
+    "description": "door_left, 5 tasks: 4 guided and 1 base policy. Start: door right, drawer random, switch off, green light off. Conditions with blocks, without, both, and the unchanged debug_all file. Seed 4 for door_left and 5 for door_right, after those of plans 1 to 3. Guidance settings and reset poses from paper_experiments/calvin_articulated_object.sh and calvin_exp_configs_examples/door_left.json",
     "n_rollouts": 10,
     "horizon": 250,
     "scale": 1.5,
@@ -11,11 +11,11 @@
         "door_left": {
             "config": "calvin_exp_configs_examples/experiments/door_left.json",
             "conditions": {
-                "blocks": "datasets/guidance_conditions/recombined_debug/door_left/drawer_closed__door_left__switch_off__green_light_off.hdf5",
-                "no_blocks": "datasets/guidance_conditions/recombined_debug_no_blocks/door_left/drawer_closed__door_left__switch_off__green_light_off.hdf5",
+                "blocks": "datasets/guidance_conditions/recombined_debug/door_left/drawer_*__door_left__switch_off__green_light_off.hdf5",
+                "no_blocks": "datasets/guidance_conditions/recombined_debug_no_blocks/door_left/drawer_*__door_left__switch_off__green_light_off.hdf5",
                 "both": [
-                    "datasets/guidance_conditions/recombined_debug/door_left/drawer_closed__door_left__switch_off__green_light_off.hdf5",
-                    "datasets/guidance_conditions/recombined_debug_no_blocks/door_left/drawer_closed__door_left__switch_off__green_light_off.hdf5"
+                    "datasets/guidance_conditions/recombined_debug/door_left/drawer_*__door_left__switch_off__green_light_off.hdf5",
+                    "datasets/guidance_conditions/recombined_debug_no_blocks/door_left/drawer_*__door_left__switch_off__green_light_off.hdf5"
                 ],
                 "debug_all": "datasets/guidance_conditions/debug_all/door_left.hdf5"
             },
