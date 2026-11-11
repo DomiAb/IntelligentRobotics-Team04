@@ -1,0 +1,26 @@
+{
+    "description": "Part 2 of 2, for running on two machines at once: drawer_close and button_on. Each part has 9 tasks, 7 guided and 2 base policy. The seeds are those of the plan in one piece, so splitting changes nothing. Start: closed drawer (open for drawer_close), switch off, green light off. Conditions with blocks, without, and both. Guidance settings per experiment from paper_experiments/calvin_articulated_object.sh",
+    "n_rollouts": 10,
+    "horizon": 250,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": true,
+    "keep_images": false,
+    "experiments": {
+        "drawer_close": {
+            "config": "calvin_exp_configs_examples/experiments/drawer_close.json",
+            "scale": 1,
+            "alpha": 40,
+            "conditions": {
+                "blocks": "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
+                "no_blocks": "datasets/guidance_conditions/recombined_debug_no_blocks/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
+                "both": [
+                    "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
+                    "datasets/guidance_conditions/recombined_debug_no_blocks/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5"
+                ]
+            },
+            "seed": 1
+        }
+    }
+}

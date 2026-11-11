@@ -8,20 +8,6 @@
     "base_policy": true,
     "keep_images": false,
     "experiments": {
-        "drawer_close": {
-            "config": "calvin_exp_configs_examples/experiments/drawer_close.json",
-            "scale": 1,
-            "alpha": 40,
-            "conditions": {
-                "blocks": "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
-                "no_blocks": "datasets/guidance_conditions/recombined_debug_no_blocks/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
-                "both": [
-                    "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
-                    "datasets/guidance_conditions/recombined_debug_no_blocks/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5"
-                ]
-            },
-            "seed": 1
-        },
         "button_on": {
             "config": "calvin_exp_configs_examples/experiments/button_on.json",
             "scale": 1,
