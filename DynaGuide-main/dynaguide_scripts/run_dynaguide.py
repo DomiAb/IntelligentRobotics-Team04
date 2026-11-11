@@ -215,6 +215,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     time_policy, time_env, time_collage, time_video = 0., 0., 0., 0. # seconds per part of the rollout, for the results json
     collage = None
     goal_tracker = make_tracker(setup_config, articulated_binaries) # decides when the rollout ends, depending on the experiment config
+    goal_tracker.update(*tracker_input(obs)) # the start state, every step below adds the state after it
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
@@ -274,14 +275,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                 traj["obs"].append(ObsUtils.unprocess_obs_dict(obs))
                 traj["next_obs"].append(ObsUtils.unprocess_obs_dict(next_obs))
          
-            # FOR CALVIN ENVIRONMENT
-            fed_state = obs["states"]
-            fed_proprio = obs["proprio"]
-            if len(obs["states"].shape) == 2: # collapse this if there's framestacking for the policy 
-                fed_state = fed_state[-1] #obs["states"][-1]
-                fed_proprio = fed_proprio[-1]
-
-            done = goal_tracker.update(fed_state, fed_proprio)
+            # FOR CALVIN ENVIRONMENT: the state after this step, so the last step counts too and a goal is seen when it happens
+            done = goal_tracker.update(*tracker_input(next_obs))
 
             # break if done or if success
             if done or success:
@@ -329,6 +324,14 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
             traj[k] = np.array(traj[k])
 
     return stats, traj, goal_tracker.behaviors
+
+
+def tracker_input(observation):
+    """The lowdim state and proprio of an observation for the GoalTracker, without the frame stacking of the policy."""
+    state, proprio = observation["states"], observation["proprio"]
+    if len(state.shape) == 2:
+        state, proprio = state[-1], proprio[-1]
+    return state, proprio
 
 
 def run_trained_agent(args):
