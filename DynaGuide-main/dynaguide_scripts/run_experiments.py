@@ -6,6 +6,7 @@ import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
 
 from core.calvin_behaviors import validate_experiment_config
+from core.goal_sequence import is_multigoal, validate_multigoal_config
 from rollout_tasks import GUIDANCE_SETTINGS, add_arguments, check_files, guidance_settings, list_tasks, prepare_output, run_tasks
 
 """
@@ -28,6 +29,9 @@ The plan:
                                 Each variant replaces pos_examples of the config: a path, a list of paths, or patterns with *.
                                 Without "conditions", the config's own pos_examples is the only variant, called "guided"
                                 "seed" : n is optional, by default the experiment's position in the plan (0, 1, ...)
+                                A multi-goal config (goal_sequence, see core/goal_sequence.py) has its conditions in its steps, so
+                                instead of "conditions" it takes "switch_variants" : {variant : switch settings}, each merged into
+                                the config's "switch", like {"latent" : {}, "oracle" : {"mode" : "oracle"}}
 
 All tasks of one experiment get the same seed, so the variants and the base policy start from the same scenes and robot poses.
 A plan split over several machines keeps its seeds by setting "seed" in each part.
@@ -41,7 +45,8 @@ The output folder:
 Running the tasks is shared with harvest_rollouts.py, see rollout_tasks.py.
 """
 
-EXPERIMENT_KEYS = ["config", "conditions", "seed"] + GUIDANCE_SETTINGS
+EXPERIMENT_KEYS = ["config", "conditions", "switch_variants", "seed"] + GUIDANCE_SETTINGS
+MULTIGOAL_TARGET = "SUCCESS" # what run_dynaguide.py prints on the Rollout line of a multi-goal episode that did every step
 BASE_POLICY = "base_policy"
 
 
@@ -57,21 +62,48 @@ def make_tasks(plan):
             raise ValueError(f"Experiment {name}: needs 'config', can have {EXPERIMENT_KEYS[1:]}. Unknown keys: {unknown}")
         with open(entry["config"], "r") as f:
             config = json.load(f)
-        validate_experiment_config(config)
         guidance = guidance_settings(plan, entry)
-        targets = config.get("target_behaviors", [])
-        variants = entry.get("conditions", {"guided" : config["pos_examples"]})
+        multigoal = is_multigoal(config)
+        if multigoal:
+            validate_multigoal_config(config)
+            if "conditions" in entry:
+                raise ValueError(f"Experiment {name}: a goal_sequence has its conditions in its steps, use switch_variants instead of conditions")
+            targets = [MULTIGOAL_TARGET]
+            variants = {variant : {**config, "switch" : {**config.get("switch", {}), **switch}}
+                        for variant, switch in entry.get("switch_variants", {"guided" : {}}).items()}
+        else:
+            validate_experiment_config(config)
+            if "switch_variants" in entry:
+                raise ValueError(f"Experiment {name}: switch_variants are only for configs with a goal_sequence")
+            targets = config.get("target_behaviors", [])
+            variants = {variant : {**config, "pos_examples" : conditions}
+                        for variant, conditions in entry.get("conditions", {"guided" : config["pos_examples"]}).items()}
         if BASE_POLICY in variants:
             raise ValueError(f"Experiment {name}: '{BASE_POLICY}' is the name of the run without guidance, call the variant differently")
         seed = entry.get("seed", number)
-        for variant, conditions in variants.items():
-            tasks.append({"folder" : f"{name}/{variant}", "config" : {**config, "pos_examples" : conditions}, "seed" : seed,
+        for variant, variant_config in variants.items():
+            tasks.append({"folder" : f"{name}/{variant}", "config" : variant_config, "seed" : seed,
                           "guidance" : guidance, "targets" : targets, "columns" : {"experiment" : name, "variant" : variant}})
         if plan.get("base_policy", False): # the guidance code still needs conditions to load, with scale 0 they have no effect
+            if multigoal: # the scale of a goal step would override --scale 0. The switch doesn't matter without guidance, the oracle is cheapest
+                config = {**config, "switch" : {**config.get("switch", {}), "mode" : "oracle"},
+                          "goal_sequence" : [{**entry, "scale" : 0} for entry in config["goal_sequence"]]}
             tasks.append({"folder" : f"{name}/{BASE_POLICY}", "config" : config, "seed" : seed,
                           "guidance" : {"scale" : 0, "ss" : 1, "alpha" : guidance["alpha"]}, "targets" : targets,
                           "columns" : {"experiment" : name, "variant" : BASE_POLICY}})
     return tasks
+
+
+def condition_specs(config):
+    """Every pos_examples / neg_examples / contrast_examples of a config, also those of the goal steps of a goal_sequence."""
+    if not is_multigoal(config):
+        return [config["pos_examples"]]
+    specs = list()
+    for entry in config["goal_sequence"]:
+        specs += [entry[key] for key in ["pos_examples", "neg_examples"] if entry.get(key) is not None]
+        if entry.get("switch", {}).get("contrast_examples") is not None:
+            specs.append(entry["switch"]["contrast_examples"])
+    return specs
 
 
 def main(args):
@@ -83,9 +115,9 @@ def main(args):
         if len(unknown) > 0:
             sys.exit(f"Experiments {unknown} aren't in the plan, choose from {list(plan['experiments'])}")
     selected = [task for task in tasks if args.experiments is None or task["columns"]["experiment"] in args.experiments]
-    check_files([task["config"]["reset_poses"] for task in selected if task["config"]["reset_poses"] is not None]
+    check_files([task["config"]["reset_poses"] for task in selected if task["config"].get("reset_poses") is not None]
                 + ([] if args.dry_run else [args.agent, args.guidance]),
-                [task["config"]["pos_examples"] for task in selected])
+                [spec for task in selected for spec in condition_specs(task["config"])])
 
     if args.dry_run:
         list_tasks(selected, plan)

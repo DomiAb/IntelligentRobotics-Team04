@@ -19,7 +19,7 @@ small change (check_state_difference) and is scored by what analyze_calvin_touch
 """
 
 BEHAVIORS = ["button_on", "button_off", "switch_on", "switch_off", "drawer_open", "drawer_close", "door_left", "door_right",
-             "red_displace", "blue_displace", "pink_displace", "no_behavior"]
+             "red_displace", "blue_displace", "pink_displace", "red_lift", "blue_lift", "pink_lift", "no_behavior"]
 
 # state index, low, high, name when going from below low to above high, name when going from above high to below low
 # the index is the one in the lowdim state, see generate_reset_state in calvin_utils.py
@@ -37,7 +37,9 @@ COMPLETED = {"door_left" : 0.26, "door_right" : 0.035,
              "switch_on" : 0.08, "switch_off" : 0.008}
 
 BLOCKS = {"red_displace" : 6, "blue_displace" : 12, "pink_displace" : 18} # index of the block position
+LIFTS = {"red_lift" : 6, "blue_lift" : 12, "pink_lift" : 18}
 BLOCK_MOVED = 0.01
+BLOCK_LIFTED = 0.03 # higher than where the block was by this much, while the robot is at it. A block is 0.04 high
 BLOCK_ROBOT_NEAR = 0.1 # so we don't count a block that moves with the drawer
 
 SANITY_BEHAVIORS = ["sanity_" + name for name in BEHAVIORS]
@@ -106,6 +108,32 @@ def label_first_interaction(states, proprio):
     return ["sanity_no_behavior"]
 
 
+def detect_behaviors(reference, state, proprio, lowest = None, highest = None):
+    """
+    The behaviors that state shows compared to reference: a joint that went from one side (ARTICULATED) to COMPLETED on the other,
+    a block that moved (displace) or rose (lift) while the robot is at it. The GoalTracker compares with the start of the episode,
+    the SequentialGoalTracker of core/goal_sequence.py with the start of the current goal step.
+    - lowest, highest: the lowest and highest joint values since the reference, if given. Then a joint counts if it was on the start side
+      at any moment, not only at the reference, so a switch that was on at the start, went off and on again shows switch_on
+    """
+    lowest = reference if lowest is None else lowest
+    highest = reference if highest is None else highest
+    detected = list()
+    for idx, low, high, rising, falling in ARTICULATED: # start beyond the authors' threshold, end at COMPLETED
+        if lowest[idx] < low and state[idx] > COMPLETED.get(rising, high):
+            detected.append(rising)
+        if highest[idx] > high and state[idx] < COMPLETED.get(falling, low):
+            detected.append(falling)
+    for name, idx in BLOCKS.items():
+        moved = np.linalg.norm(state[idx:idx + 3] - reference[idx:idx + 3])
+        if moved > BLOCK_MOVED and np.linalg.norm(proprio[0:3] - state[idx:idx + 3]) < BLOCK_ROBOT_NEAR:
+            detected.append(name)
+    for name, idx in LIFTS.items():
+        if state[idx + 2] - reference[idx + 2] > BLOCK_LIFTED and np.linalg.norm(proprio[0:3] - state[idx:idx + 3]) < BLOCK_ROBOT_NEAR:
+            detected.append(name)
+    return detected
+
+
 class GoalTracker:
     """
     Follows one episode. Call update() every step with the state, it returns True once the outcome is decided:
@@ -125,17 +153,7 @@ class GoalTracker:
         return any(name in self.targets or name in self.avoid for name in self.achieved)
 
     def detect(self, state, proprio):
-        detected = list()
-        for idx, low, high, rising, falling in ARTICULATED: # start beyond the authors' threshold, end at COMPLETED
-            if self.start_state[idx] < low and state[idx] > COMPLETED.get(rising, high):
-                detected.append(rising)
-            if self.start_state[idx] > high and state[idx] < COMPLETED.get(falling, low):
-                detected.append(falling)
-        for name, idx in BLOCKS.items():
-            moved = np.linalg.norm(state[idx:idx + 3] - self.start_state[idx:idx + 3])
-            if moved > BLOCK_MOVED and np.linalg.norm(proprio[0:3] - state[idx:idx + 3]) < BLOCK_ROBOT_NEAR:
-                detected.append(name)
-        return detected
+        return detect_behaviors(self.start_state, state, proprio)
 
     @property
     def behaviors(self):

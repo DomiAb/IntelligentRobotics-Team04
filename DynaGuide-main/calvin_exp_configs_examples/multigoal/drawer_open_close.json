@@ -1,0 +1,38 @@
+{
+    "description": "Two steps on the same joint: open the drawer, then close it again. Not possible with one goal, the drawer can't be open and closed at once",
+    "env_setup": {
+        "drawer": "closed",
+        "switch": "off",
+        "green_light": "off"
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "goal_sequence": [
+        {
+            "name": "open_drawer",
+            "behaviors": [
+                "drawer_open"
+            ],
+            "pos_examples": [
+                "datasets/guidance_conditions/recombined_debug/drawer_open/drawer_open__door_*__switch_off__green_light_off.hdf5"
+            ],
+            "scale": 1,
+            "alpha": 40,
+            "switch": {
+                "contrast_examples": [
+                    "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5"
+                ]
+            }
+        },
+        {
+            "name": "close_drawer",
+            "behaviors": [
+                "drawer_close"
+            ],
+            "pos_examples": [
+                "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5"
+            ],
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}

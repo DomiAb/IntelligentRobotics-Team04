@@ -1,0 +1,63 @@
+{
+    "description": "Conditions for the intermediate goal steps of the multi-goal task open the drawer, put the blue block in, close the drawer (calvin_exp_configs_examples/multigoal). Each goal is the state at the end of one step, with the hand where it is when the step is done",
+    "goals": [
+        {
+            "name": "drawer_open_hand_near",
+            "n": 10,
+            "where": {
+                "drawer": "open",
+                "tcp_near": "drawer_handle"
+            }
+        },
+        {
+            "name": "blue_lifted_drawer_open",
+            "n": 10,
+            "where": {
+                "drawer": "open",
+                "blocks": {
+                    "blue": "lifted"
+                }
+            }
+        },
+        {
+            "name": "blue_in_open_drawer_released",
+            "n": 10,
+            "where": {
+                "drawer": "open",
+                "blocks": {
+                    "blue": [
+                        "drawer",
+                        "released"
+                    ]
+                },
+                "tcp_near": "blue",
+                "tcp_radius": 0.12
+            }
+        },
+        {
+            "name": "drawer_closed_hand_near_blue_inside",
+            "n": 10,
+            "where": {
+                "drawer": "closed",
+                "blocks": {
+                    "blue": "drawer"
+                },
+                "tcp_near": "drawer_handle",
+                "tcp_radius": 0.1
+            },
+            "exclude": [
+                "validation_ep0:1156",
+                "validation_ep0:1171"
+            ]
+        },
+        {
+            "name": "drawer_closed_hand_near",
+            "n": 10,
+            "where": {
+                "drawer": "closed",
+                "tcp_near": "drawer_handle",
+                "tcp_radius": 0.1
+            }
+        }
+    ]
+}

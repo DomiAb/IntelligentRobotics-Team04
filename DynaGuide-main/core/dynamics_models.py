@@ -105,7 +105,7 @@ class FinalStatePredictionDino(nn.Module):
             ), 
         ])
 
-        self.state_encoder = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14').to("cuda")
+        self.state_encoder = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
 
         self.proprio = proprio # how we add robot proprioception 
         if proprio is not None:
@@ -201,6 +201,13 @@ class FinalStatePredictionDino(nn.Module):
         This function is useful during DynaGuide to compute the z-hat that we use for the guidance signal. 
         """
         image_embed = self.compute_image_state_patches(state) # [B, Patches, D]
+        return self.state_action_embedding_from_patches(image_embed, state, actions)
+
+    def state_action_embedding_from_patches(self, image_embed, state, actions):
+        """
+        state_action_embedding with the DINO patches of the image already computed. The guidance calls the model many times for the same
+        image while denoising one action chunk, this way the image is encoded once (see calculate_classifier_guidance).
+        """
         action_embed = self.action_embedder(actions) #[B, 1, D]
         if self.proprio is not None:
             proprio_embed = torch.unsqueeze(self.proprio_embedder(state[self.proprio]), axis = 1) # note that this is a bit jank but for experiments it's ok 
@@ -209,7 +216,7 @@ class FinalStatePredictionDino(nn.Module):
         else:
             combined_embed = torch.concatenate([image_embed, action_embed], axis = 1)
 
-        combined_embed += self.pos_embedding 
+        combined_embed = combined_embed + self.pos_embedding 
         predicted_state = self.state_decoder_transformer(combined_embed)
         predicted_z_end = predicted_state[:, :256]  # The first 256 output tokens are the 16x16 predicted output patch. Ignore the others 
         return predicted_z_end 
@@ -236,7 +243,7 @@ class FinalStatePredictionDinoCLS(nn.Module):
             ), 
         ])
 
-        self.state_encoder = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14').to("cuda")
+        self.state_encoder = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
 
         for parameter in self.state_encoder.parameters():
             parameter.requires_grad = False # freezing the encoder Dino 

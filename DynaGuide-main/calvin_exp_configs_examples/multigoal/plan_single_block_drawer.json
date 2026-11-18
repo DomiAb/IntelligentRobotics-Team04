@@ -1,0 +1,20 @@
+{
+    "description": "Open the drawer, pick up the blue block, put it in the drawer, close the drawer, in one fixed scene with one block. The latent switch (DynaGuide decides when a step is done), the oracle switch (the env tells it) and the base policy, from the same start scenes. Run on the workstation from DynaGuide-main, see dynaguide_scripts/run_single_block_drawer.bat",
+    "n_rollouts": 20,
+    "horizon": 800,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": true,
+    "keep_images": false,
+    "experiments": {
+        "single_block_drawer": {
+            "config": "calvin_exp_configs_examples/multigoal/single_block_drawer.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {"mode": "oracle"}
+            },
+            "seed": 0
+        }
+    }
+}

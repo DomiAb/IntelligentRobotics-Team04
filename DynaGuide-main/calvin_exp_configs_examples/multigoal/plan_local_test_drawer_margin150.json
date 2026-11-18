@@ -1,0 +1,21 @@
+{
+    "description": "Like plan_local_test_drawer.json, only the latent switch with margin 150 instead of the default 30, to test whether a higher margin stops the switch at a drawer that stopped short of 0.15 (see the notebook). Same seeds, so the episodes start like those of the first run",
+    "n_rollouts": 3,
+    "horizon": 400,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "drawer_open_close": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_open_close.json",
+            "switch_variants": {
+                "latent_margin150": {
+                    "margin": 150
+                }
+            },
+            "seed": 0
+        }
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "description": "Small test of multi-goal guidance on a laptop CPU (about 1 min per 50 steps): drawer open then close, with the latent switch, the oracle switch and the base policy. The full plan is plan_multigoal.json",
+    "n_rollouts": 3,
+    "horizon": 400,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": true,
+    "keep_images": false,
+    "experiments": {
+        "drawer_open_close": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_open_close.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 0
+        }
+    }
+}

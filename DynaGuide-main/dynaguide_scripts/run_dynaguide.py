@@ -43,7 +43,9 @@ from core.dynamics_models import FinalStatePredictionDino
 from core.embedder_datasets import load_conditions
 from core.calvin_utils import condition_files, generate_reset_state
 from core.calvin_behaviors import make_tracker, validate_experiment_config, summarize_behaviors
-from core.dynaguide import calculate_classifier_guidance, calculate_position_guidance
+from core.dynaguide import DEVICE, calculate_classifier_guidance, calculate_position_guidance
+from core.goal_sequence import SequentialGoalTracker, is_multigoal, summarize_sequence, validate_multigoal_config
+from core.multigoal_guidance import MultiGoalGuidance, switch_settings
 
 """
 THIS CODE ADAPTED FROM ROBOMIMIC POLICY ROLLOUT CODE
@@ -86,13 +88,16 @@ def find_calvin_env(env):
     return env
 
 
-def render_video_frame(env, camera_names, collage):
+def render_video_frame(env, camera_names, collage, label = None):
     video_img = []
     for cam_name in camera_names:
         img = env.render(mode="rgb_array", height=128 * 5, width=128 * 5, camera_name=cam_name)
         video_img.append(img)
     video_img = np.concatenate(video_img, axis=0) # concatenate horizontally
     video_img = cv2.resize(video_img, (128 * 5, 128 * 5))
+    if label is not None: # the goal step DynaGuide guides towards, and what the env saw done, for multi-goal runs
+        for color, thickness in [((0, 0, 0), 4), ((255, 255, 255), 1)]:
+            video_img = cv2.putText(np.ascontiguousarray(video_img), label, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, thickness, cv2.LINE_AA)
     if collage is not None:
         video_img = np.concatenate((collage, video_img), axis = 0)
     return video_img
@@ -117,7 +122,7 @@ def visualize_guidance_process(model, actions_list, obs, target_embeddings, alph
 
     mod_obs = TensorUtils.to_tensor(obs)
     mod_obs = TensorUtils.to_batch(mod_obs)
-    mod_obs = TensorUtils.to_device(mod_obs, "cuda")
+    mod_obs = TensorUtils.to_device(mod_obs, DEVICE)
     mod_obs = TensorUtils.to_float(mod_obs)
     if len(mod_obs[MAIN_CAMERA].shape) == 4:
         mod_obs[MAIN_CAMERA] = torch.unsqueeze(mod_obs[MAIN_CAMERA], dim = 1) # for policies that don't have framestacking; in dp this is done automatically 
@@ -214,8 +219,14 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     traj = dict(actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict)
     time_policy, time_env, time_collage, time_video = 0., 0., 0., 0. # seconds per part of the rollout, for the results json
     collage = None
-    goal_tracker = make_tracker(setup_config, articulated_binaries) # decides when the rollout ends, depending on the experiment config
+    multigoal = is_multigoal(setup_config)
+    if multigoal: # a goal_sequence: the env scores the steps in order, DynaGuide moves on by itself (core/multigoal_guidance.py)
+        goal_tracker = SequentialGoalTracker(setup_config)
+        classifier_grad.reset()
+    else:
+        goal_tracker = make_tracker(setup_config, articulated_binaries) # decides when the rollout ends, depending on the experiment config
     goal_tracker.update(*tracker_input(obs)) # the start state, every step below adds the state after it
+    video_label = None
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
@@ -244,6 +255,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                 print("Guidance norms: ", [np.linalg.norm(guidance.detach().cpu().numpy()).item() for guidance in guidance_list])
                 if not no_collage:
                     t3 = time.time()
+                    if multigoal: # the conditions of the goal step it guides towards now
+                        good_embeddings, bad_embeddings = classifier_grad.good_embeddings, classifier_grad.bad_embeddings
                     target_embeddings = bad_embeddings if good_embeddings is None else good_embeddings
                     collage = visualize_guidance_process(model, denoising_list, obs, target_embeddings, alpha = alpha)
                     time_collage += time.time() - t3
@@ -251,7 +264,7 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
             if video_writer is not None:
                 if video_count % video_skip == 0:
                     t3 = time.time()
-                    video_img = render_video_frame(env, camera_names, collage)
+                    video_img = render_video_frame(env, camera_names, collage, video_label)
                     video_writer.append_data(video_img)
                     time_video += time.time() - t3
                 if step_i % 14 == 0 and save_frames:
@@ -278,10 +291,21 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
             # FOR CALVIN ENVIRONMENT: the state after this step, so the last step counts too and a goal is seen when it happens
             done = goal_tracker.update(*tracker_input(next_obs))
 
+            if multigoal and not done:
+                # DynaGuide looks at the new observation and moves on to the next goal step if this one looks done. The oracle switch
+                # uses what the env saw instead. The queued actions were planned for the old goal, so plan again right away
+                moved_on = classifier_grad.observe(next_obs, step_i + 1, last_action = act, oracle_steps_completed = goal_tracker.steps_completed)
+                if moved_on and classifier_grad.steps[classifier_grad.current - 1].switch["replan_on_switch"]:
+                    policy.policy.action_queue.clear()
+            if multigoal:
+                names = [step.name for step in goal_tracker.steps]
+                video_label = f"guiding: {classifier_grad.step.name} | env done: {goal_tracker.steps_completed}/{len(names)}"
+
             # break if done or if success
             if done or success:
                 # always capture the last frame
-                video_writer.append_data(render_video_frame(env, camera_names, collage))
+                if video_writer is not None:
+                    video_writer.append_data(render_video_frame(env, camera_names, collage, video_label))
                 break
 
             # update for next iter
@@ -323,6 +347,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
         else:
             traj[k] = np.array(traj[k])
 
+    if multigoal: # the steps the env saw done and when DynaGuide moved on, for summarize_sequence
+        return stats, traj, {"goal" : goal_tracker.summary(), "switch" : classifier_grad.log()}
     return stats, traj, goal_tracker.behaviors
 
 
@@ -364,42 +390,76 @@ def run_trained_agent(args):
 
     model = FinalStatePredictionDino(ACTION_DIM, ACTION_CHUNK_LENGTH, cameras=cameras, reconstruction = True, \
                                      proprio = proprio, proprio_dim = proprio_dim)
-    model.load_state_dict(torch.load(args.guidance))
-    model.to("cuda")
+    model.load_state_dict(torch.load(args.guidance, map_location = DEVICE))
+    model.to(DEVICE)
     model.eval()
 
     exp_setup_config = None 
     if args.exp_setup_config is not None: 
         with open(args.exp_setup_config, "r") as f:
             exp_setup_config = json.load(f)
-        validate_experiment_config(exp_setup_config) # catch a typo in the config before spending time on rollouts
-        for key in ["pos_examples"] + (["neg_examples"] if exp_setup_config["use_neg"] else []):
-            if exp_setup_config[key] is not None:
-                condition_files(exp_setup_config[key]) # a missing file stops here, not after loading the conditions
+        multigoal = is_multigoal(exp_setup_config)
+        if multigoal:
+            validate_multigoal_config(exp_setup_config)
+            for entry in exp_setup_config["goal_sequence"]:
+                switch_settings(exp_setup_config, entry) # a typo in the switch settings stops here too
+                for key in ["pos_examples", "neg_examples"]:
+                    if entry.get(key) is not None:
+                        condition_files(entry[key])
+                if entry.get("switch", {}).get("contrast_examples") is not None:
+                    condition_files(entry["switch"]["contrast_examples"])
+        else:
+            validate_experiment_config(exp_setup_config) # catch a typo in the config before spending time on rollouts
+            for key in ["pos_examples"] + (["neg_examples"] if exp_setup_config["use_neg"] else []):
+                if exp_setup_config[key] is not None:
+                    condition_files(exp_setup_config[key]) # a missing file stops here, not after loading the conditions
+
+    multigoal = is_multigoal(exp_setup_config)
+    if multigoal and args.direct_position_guidance:
+        raise ValueError("--direct_position_guidance has no goal steps, it can't run a goal_sequence")
+    def conditions(spec):
+        return load_conditions(spec, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, padding = padding, pad_mode = pad_mode, proprio = proprio)
 
     # ensure backward compatibility 
-    good_dataset_path = args.good_states if args.exp_setup_config is None else exp_setup_config["pos_examples"]
+    good_dataset_path = args.good_states if args.exp_setup_config is None else exp_setup_config.get("pos_examples")
     good_dataset = None 
-    if exp_setup_config["pos_examples"] is not None:
+    if multigoal:
+        pass # every goal step has its own conditions, loaded below
+    elif exp_setup_config["pos_examples"] is not None:
         good_dataset = load_conditions(good_dataset_path, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, \
                                        padding = padding, pad_mode = pad_mode, proprio = proprio) # one file or several
     
     bad_dataset = None 
-    if exp_setup_config["use_neg"]:
+    if not multigoal and exp_setup_config["use_neg"]:
         bad_dataset_path = exp_setup_config["neg_examples"]
 
         bad_dataset = load_conditions(bad_dataset_path, action_chunk_length = ACTION_CHUNK_LENGTH, cameras = cameras, \
                                       padding = padding, pad_mode = pad_mode, proprio = proprio)
     
-    if args.direct_position_guidance:
+    if multigoal:
+        step_inputs = list()
+        for number, entry in enumerate(exp_setup_config["goal_sequence"]):
+            switch = switch_settings(exp_setup_config, entry)
+            use_neg = entry.get("use_neg", entry.get("neg_examples") is not None)
+            step_inputs.append({"name" : entry.get("name", f"step_{number}"),
+                                "good_dataset" : conditions(entry["pos_examples"]) if entry.get("pos_examples") is not None else None,
+                                "bad_dataset" : conditions(entry["neg_examples"]) if use_neg else None,
+                                "contrast_dataset" : conditions(switch["contrast_examples"]) if switch.get("contrast_examples") is not None else None,
+                                "scale" : entry.get("scale", args.scale), "alpha" : entry.get("alpha", args.alpha), "switch" : switch})
+        classifier_grad = MultiGoalGuidance.build(model, step_inputs, MAIN_CAMERA, DEVICE, max_examples = args.max_examples,
+                                                  action_chunk_length = ACTION_CHUNK_LENGTH)
+        good_embeddings, bad_embeddings = classifier_grad.good_embeddings, classifier_grad.bad_embeddings
+
+    elif args.direct_position_guidance:
         classifier_grad, good_embeddings, bad_embeddings = calculate_position_guidance(exp_setup_config["loc_target"], args.scale)
     
     else:
         classifier_grad, good_embeddings, bad_embeddings = calculate_classifier_guidance(model, good_dataset = good_dataset, main_camera = MAIN_CAMERA, 
-                                                        scale = args.scale, bad_dataset = bad_dataset, alpha = args.alpha, max_examples = args.max_examples)
+                                                        scale = args.scale, bad_dataset = bad_dataset, alpha = args.alpha, max_examples = args.max_examples,
+                                                        device = DEVICE)
     
     robot_initial_positions = None  
-    if exp_setup_config["reset_poses"] is not None: 
+    if exp_setup_config.get("reset_poses") is not None: 
         with open(exp_setup_config["reset_poses"], "r") as f: # for button and door right 
             poses = json.load(f) 
             robot_initial_positions = [np.array(k) for k in poses["robot_states"]]
@@ -494,7 +554,13 @@ def run_trained_agent(args):
         
         rollout_stats.append(stats)
         episode_behaviors.append(behaviors)
-        print(f"Rollout {i} behavior: {behaviors}")
+        if multigoal: # the behaviors stay on this line, rollout_tasks.py reads them from it
+            goal = behaviors["goal"]
+            print(f"Rollout {i} behavior: {goal['behaviors']} goal steps {goal['steps_completed']} / {len(exp_setup_config['goal_sequence'])}"
+                  f"{' SUCCESS' if goal['success'] else ''}{'' if goal['failure'] is None else ', failed: ' + goal['failure']}, "
+                  f"DynaGuide moved on at {[(s['from'], s['t']) for s in behaviors['switch']['switches']]}")
+        else:
+            print(f"Rollout {i} behavior: {behaviors}")
 
         if write_dataset:
             # store transitions
@@ -518,7 +584,10 @@ def run_trained_agent(args):
 
     rollout_stats = TensorUtils.list_of_flat_dict_to_dict_of_list(rollout_stats)
     avg_rollout_stats = { k : np.mean(rollout_stats[k]) for k in rollout_stats }
-    avg_rollout_stats.update(summarize_behaviors(episode_behaviors, exp_setup_config)) # replaces the environment's Success_Rate, which is always 0
+    if multigoal:
+        avg_rollout_stats.update(summarize_sequence([b["goal"] for b in episode_behaviors], exp_setup_config, [b["switch"] for b in episode_behaviors]))
+    else:
+        avg_rollout_stats.update(summarize_behaviors(episode_behaviors, exp_setup_config)) # replaces the environment's Success_Rate, which is always 0
     avg_rollout_stats["Time_Episode"] = np.sum(rollout_stats["time"]) / 60. # total time taken for rollouts in minutes
     avg_rollout_stats["Num_Episode"] = len(rollout_stats["Success_Rate"]) # number of episodes attempted
     print("Average Rollout Stats")

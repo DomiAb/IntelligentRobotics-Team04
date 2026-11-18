@@ -1,0 +1,52 @@
+{
+    "description": "Multi-goal guidance: every config with the latent switch (DynaGuide decides when a step is done) and the oracle switch (the env tells it, for comparison), plus the base policy. Run from DynaGuide-main with dynaguide_scripts/run_experiments.py",
+    "n_rollouts": 10,
+    "horizon": 600,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": true,
+    "keep_images": false,
+    "experiments": {
+        "drawer_open_close": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_open_close.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 0
+        },
+        "drawer_block_close": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_block_close.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 1
+        },
+        "drawer_lift_block_close": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_lift_block_close.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 2
+        },
+        "switch_then_drawer": {
+            "config": "calvin_exp_configs_examples/multigoal/switch_then_drawer.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 3
+        }
+    }
+}

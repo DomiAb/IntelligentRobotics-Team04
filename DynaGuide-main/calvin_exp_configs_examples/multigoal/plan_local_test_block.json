@@ -1,0 +1,22 @@
+{
+    "description": "Small test of multi-goal guidance on a laptop CPU: open the drawer, put the blue block in, close the drawer, with the latent and the oracle switch",
+    "n_rollouts": 2,
+    "horizon": 600,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "drawer_block_close": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_block_close.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 1
+        }
+    }
+}

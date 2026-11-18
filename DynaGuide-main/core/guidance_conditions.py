@@ -11,6 +11,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 from core.calvin_behaviors import ARTICULATED
+from core.calvin_utils import BLOCK_HEIGHT
 
 """
 Creates guidance conditions (hdf5 files for pos_examples and neg_examples) from recorded data. A source becomes a list of Recording,
@@ -254,23 +255,88 @@ def _anchor_position(name, states):
 TCP_ANCHORS = ["drawer_handle", "door_handle", "switch", "button"]
 
 
-def _block_mask(color, word, recording):
+# the table in thirds along x, split halfway between the spots table_left, table_center and table_right of calvin_utils.PLACES
+TABLE_THIRDS = (0.1125, 0.2375)
+STACK_XY, STACK_Z = 0.03, 0.01 # how far a block on top of another may be off its center, and off the height of one block
+DEFAULT_BLOCK_RADIUS = 0.05
+BLOCK_WORDS = ["drawer", "table", "table_left", "table_center", "table_right", "cabinet", "cabinet_left", "cabinet_right",
+               "held", "lifted", "released", "resting"]
+
+
+def _block_word_mask(color, word, recording):
     position = recording.states[:, BLOCK_POSITION[color] : BLOCK_POSITION[color] + 3]
     x, y, z = position[:, 0], position[:, 1], position[:, 2]
     resting_height = np.abs(z - BLOCK_REST_Z[1]) < 0.015
     in_cabinet = resting_height & (y > CABINET_FRONT_Y)
+    on_table = resting_height & (y <= CABINET_FRONT_Y)
     near_tcp = np.linalg.norm(recording.proprio[:, :3] - position, axis = 1) < HELD_DISTANCE
     held = near_tcp & (recording.proprio[:, GRIPPER_WIDTH] < HELD_WIDTH) & (recording.proprio[:, GRIPPER_ACTION] < 0)
+    on_drawer_floor = np.abs(z - BLOCK_REST_Z[0]) < 0.015
     masks = {"drawer" : z < 0.40,
-             "table" : resting_height & (y <= CABINET_FRONT_Y),
+             "table" : on_table,
+             "table_left" : on_table & (x < TABLE_THIRDS[0]),
+             "table_center" : on_table & (x >= TABLE_THIRDS[0]) & (x < TABLE_THIRDS[1]),
+             "table_right" : on_table & (x >= TABLE_THIRDS[1]),
              "cabinet" : in_cabinet,
              "cabinet_left" : in_cabinet & (x < CABINET_MIDDLE_X),
              "cabinet_right" : in_cabinet & (x >= CABINET_MIDDLE_X),
              "held" : held,
-             "lifted" : held & (np.abs(z - BLOCK_REST_Z[0]) > 0.02) & (np.abs(z - BLOCK_REST_Z[1]) > 0.02)}
+             "lifted" : held & (np.abs(z - BLOCK_REST_Z[0]) > 0.02) & (np.abs(z - BLOCK_REST_Z[1]) > 0.02),
+             "released" : ~held, # placed somewhere and let go, not in the gripper
+             "resting" : ~held & (resting_height | on_drawer_floor)} # lying on the table, the cabinet floor or the drawer floor
     if word not in masks:
-        raise ValueError(f"Unknown state '{word}' for block {color}, choose from {list(masks)}")
+        raise ValueError(f"Unknown state '{word}' for block {color}, choose from {BLOCK_WORDS}, a list of them, or a dict with near / on")
     return masks[word]
+
+
+def _block_mask(color, spec, recording):
+    """
+    What a block should be, see find_frames:
+    - a word of BLOCK_WORDS, like "drawer"
+    - a list, all of which must hold, like ["drawer", "released"]
+    - {"near" : [x, y, z] or a block color, "radius" : 0.05}: its center that close to a point or to the other block
+    - {"on" : color}: stacked on top of the other block
+    """
+    if isinstance(spec, str):
+        return _block_word_mask(color, spec, recording)
+    if isinstance(spec, list):
+        mask = np.ones(len(recording), dtype = bool)
+        for part in spec:
+            mask &= _block_mask(color, part, recording)
+        return mask
+    if not isinstance(spec, dict) or len(set(spec) & {"near", "on"}) != 1 or not set(spec) <= {"near", "on", "radius"}:
+        raise ValueError(f"Block {color}: expected a word, a list, {{'near' : ..., 'radius' : ...}} or {{'on' : color}}, got {spec}")
+    position = recording.states[:, BLOCK_POSITION[color] : BLOCK_POSITION[color] + 3]
+    if "on" in spec:
+        other = spec["on"]
+        if other not in BLOCK_POSITION or other == color:
+            raise ValueError(f"Block {color}: 'on' needs another block color from {list(BLOCK_POSITION)}, got {other}")
+        below = recording.states[:, BLOCK_POSITION[other] : BLOCK_POSITION[other] + 3]
+        return (np.linalg.norm(position[:, :2] - below[:, :2], axis = 1) < STACK_XY) \
+             & (np.abs(position[:, 2] - below[:, 2] - BLOCK_HEIGHT) < STACK_Z)
+    target = spec["near"]
+    if isinstance(target, str):
+        if target not in BLOCK_POSITION or target == color:
+            raise ValueError(f"Block {color}: 'near' needs [x, y, z] or another block color, got {target}")
+        target = recording.states[:, BLOCK_POSITION[target] : BLOCK_POSITION[target] + 3]
+    elif not (isinstance(target, list) and len(target) == 3):
+        raise ValueError(f"Block {color}: 'near' needs [x, y, z] or another block color, got {target}")
+    return np.linalg.norm(position - np.asarray(target, dtype = float), axis = 1) < spec.get("radius", DEFAULT_BLOCK_RADIUS)
+
+
+class StateView:
+    """One state (or a few) in the shape find_frames reads from a Recording, for checking goals during a rollout."""
+    def __init__(self, states, proprio):
+        self.states = np.atleast_2d(np.asarray(states, dtype = np.float64))
+        self.proprio = np.atleast_2d(np.asarray(proprio, dtype = np.float64))
+
+    def __len__(self):
+        return len(self.states)
+
+
+def state_matches(state, proprio, where):
+    """True if one lowdim state and proprio match the description of find_frames. Used by the goal steps of a goal_sequence."""
+    return bool(find_frames(StateView(state, proprio), where)[0])
 
 
 def find_frames(recording, where):
@@ -278,7 +344,9 @@ def find_frames(recording, where):
     Returns a mask of the frames that match all of this description. See calvin_exp_configs_examples/guidance_goals for an example.
     - sliding_door, drawer, switch, green_light: the words of env_setup, or a range [low, high]
     - button: pressed or released, or a range [low, high]
-    - blocks: {"red" : "drawer"} with one of drawer, table, cabinet, cabinet_left, cabinet_right, held, lifted
+    - blocks: {"red" : "drawer"} with one of BLOCK_WORDS (drawer, table, table_left, table_center, table_right, cabinet, cabinet_left,
+      cabinet_right, held, lifted, released, resting), a list of them that must all hold, like ["drawer", "released"],
+      {"near" : [x, y, z] or another color, "radius" : 0.05}, or {"on" : "red"} for a block stacked on the red one
     - tcp_near: drawer_handle, door_handle, switch, button, a block color or [x, y, z]. tcp_radius is how close, 0.08 by default
     - gripper: open or closed
     """
@@ -298,10 +366,10 @@ def find_frames(recording, where):
         low, high = wanted
         mask &= (recording.states[:, JOINT_INDEX[name]] >= low) & (recording.states[:, JOINT_INDEX[name]] <= high)
 
-    for color, word in where.get("blocks", {}).items():
+    for color, spec in where.get("blocks", {}).items():
         if color not in BLOCK_POSITION:
             raise ValueError(f"where blocks: unknown block '{color}', choose from {list(BLOCK_POSITION)}")
-        mask &= _block_mask(color, word, recording)
+        mask &= _block_mask(color, spec, recording)
 
     if "tcp_near" in where:
         anchor = _anchor_position(where["tcp_near"], recording.states)

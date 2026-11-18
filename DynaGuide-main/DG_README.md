@@ -155,6 +155,15 @@ python dynaguide_scripts/run_dynaguide.py  --video_path $output_folder/$run_name
 ```
 For examples of this evaluation call, look at the shell files in `paper_experiments`. Note that the scale, ss, and alpha can be modified here. 
 
+### Multi-goal guidance (sequential goal steps)
+An experiment config with a `goal_sequence` instead of `target_behaviors` makes DynaGuide follow several goal steps in order, like "open the drawer, put the blue block in, close the drawer". Each step has its own guidance conditions (and optionally `scale`, `alpha`). DynaGuide decides by itself, from its latent embedding, when a step is done and moves on to the next. The environment scores the steps in order (`core/goal_sequence.py`). Examples are in `calvin_exp_configs_examples/multigoal`, the design, the calibration of the switch and the test results are in `Multigoal guidance.ipynb`:
+
+```
+python dynaguide_scripts/run_dynaguide.py --agent base_policy_300.pth --guidance dynamics_model_5900.pth \
+    --exp_setup_config calvin_exp_configs_examples/multigoal/drawer_open_close.json --output_folder results/my_multigoal_run \
+    --n_rollouts 10 --horizon 600 --camera_names third_person --video_skip 2 --no_collage --no_live_render --scale 1.5 --ss 4 --alpha 30
+```
+
 
 ## Conducting Experiments from Paper
 For your convenience, the scripts used to run the paper experiments are included in `paper_experiments/`. Modifications will be needed for different system capacities and paths. 

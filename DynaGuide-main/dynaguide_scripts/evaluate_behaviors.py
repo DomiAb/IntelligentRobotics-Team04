@@ -4,6 +4,8 @@ python dynaguide_scripts/evaluate_behaviors.py \
     --dataset results/my_run \
     --config calvin_exp_configs_examples/switch_on.json \
     --output results/behaviors.json
+
+A config with a goal_sequence (core/goal_sequence.py) is scored step by step, with the SequentialGoalTracker.
 """
 
 import argparse
@@ -15,6 +17,7 @@ import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
 
 from core.calvin_behaviors import evaluate_dataset
+from core.goal_sequence import evaluate_sequence_dataset, is_multigoal
 
 
 def main():
@@ -34,7 +37,7 @@ def main():
             raise FileNotFoundError(f"Expected one hdf5 file in {dataset}, found {rollout_files}. Pass the file instead.")
         dataset = rollout_files[0]
 
-    results = evaluate_dataset(dataset, config)
+    results = evaluate_sequence_dataset(dataset, config) if is_multigoal(config) else evaluate_dataset(dataset, config)
     results_json = json.dumps(results, indent=4)
     print(results_json)
     if args.output is not None:

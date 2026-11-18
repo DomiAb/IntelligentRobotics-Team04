@@ -1,0 +1,65 @@
+{
+    "description": "Open the drawer, put the blue block in, close the drawer. The block step is a state goal: blue in the drawer and let go",
+    "env_setup": {
+        "drawer": "closed",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "blue": "table_center"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "goal_sequence": [
+        {
+            "name": "open_drawer",
+            "behaviors": [
+                "drawer_open"
+            ],
+            "pos_examples": [
+                "datasets/guidance_conditions/recombined_debug/drawer_open/drawer_open__door_*__switch_off__green_light_off.hdf5",
+                "datasets/guidance_conditions/multigoal_drawer_block/drawer_open_hand_near.hdf5"
+            ],
+            "scale": 1,
+            "alpha": 40,
+            "switch": {
+                "contrast_examples": [
+                    "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5"
+                ]
+            }
+        },
+        {
+            "name": "blue_in_drawer",
+            "where": {
+                "drawer": "open",
+                "blocks": {
+                    "blue": [
+                        "drawer",
+                        "released"
+                    ]
+                }
+            },
+            "pos_examples": [
+                "datasets/guidance_conditions/multigoal_drawer_block/blue_in_open_drawer_released.hdf5"
+            ],
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "close_drawer",
+            "behaviors": [
+                "drawer_close"
+            ],
+            "where": {
+                "blocks": {
+                    "blue": "drawer"
+                }
+            },
+            "pos_examples": [
+                "datasets/guidance_conditions/recombined_debug/drawer_close/drawer_closed__door_*__switch_off__green_light_off.hdf5",
+                "datasets/guidance_conditions/multigoal_drawer_block/drawer_closed_hand_near_blue_inside.hdf5"
+            ],
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}

@@ -3,7 +3,10 @@ from tqdm import tqdm
 import torch 
 import random
 
-def prepare_np(data, device = "cuda"):
+# the GPU if there is one. The authors' code assumed CUDA everywhere, on a machine without it everything runs on the CPU
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+def prepare_np(data, device = DEVICE):
     if type(data) == dict:
         return {k : torch.tensor(v).to(device).to(torch.float32) for k, v in data.items()}
     return torch.tensor(data).to(device).to(torch.float32)
@@ -12,7 +15,7 @@ def calculate_position_guidance(target_position, scale):
     """
     This function calculates position-based guidance as seen in this paper https://arxiv.org/abs/2411.16627
     """
-    target_position_tensor = torch.tensor(target_position, device = "cuda", requires_grad = True)
+    target_position_tensor = torch.tensor(target_position, device = DEVICE, requires_grad = True)
     target_position_tensor = torch.unsqueeze(target_position_tensor, axis = 0)
     def guidance(states, actions): 
         DOWNSCALING = 40
@@ -31,7 +34,7 @@ def calculate_position_guidance(target_position, scale):
     return guidance, None, None
   
 
-def calculate_classifier_guidance(model, good_dataset, scale, main_camera, bad_dataset = None, alpha = 20, max_examples = None):
+def calculate_classifier_guidance(model, good_dataset, scale, main_camera, bad_dataset = None, alpha = 20, max_examples = None, device = DEVICE):
     # max_examples is for ablation test 
     good_embeddings_list = list()
     bad_embeddings_list = list()
@@ -43,7 +46,7 @@ def calculate_classifier_guidance(model, good_dataset, scale, main_camera, bad_d
         for length in tqdm(good_dataset.lengths_list):
             idx += length 
             sample = good_dataset.get_labeled_item(idx - 1) 
-            state, action, label = prepare_np(sample[0]), prepare_np(sample[1]), sample[2]
+            state, action, label = prepare_np(sample[0], device), prepare_np(sample[1], device), sample[2]
             state = {k : torch.unsqueeze(v, dim = 0) for k, v in state.items()}
             action = torch.unsqueeze(action, dim = 0) # compensates for the batch dimension 
             with torch.no_grad():
@@ -60,7 +63,7 @@ def calculate_classifier_guidance(model, good_dataset, scale, main_camera, bad_d
         for length in tqdm(bad_dataset.lengths_list):
             idx += length 
             sample = bad_dataset.get_labeled_item(idx - 1) 
-            state, action, label = prepare_np(sample[0]), prepare_np(sample[1]), sample[2]
+            state, action, label = prepare_np(sample[0], device), prepare_np(sample[1], device), sample[2]
             state = {k : torch.unsqueeze(v, dim = 0) for k, v in state.items()}
             action = torch.unsqueeze(action, dim = 0) # compensates for the batch dimension 
             with torch.no_grad():
@@ -71,11 +74,24 @@ def calculate_classifier_guidance(model, good_dataset, scale, main_camera, bad_d
     print("I AM USING SCALE ",  scale)
     print("I AM USING ALPHA ", alpha)
     
+    # The policy calls the guidance ss x denoising steps times per action chunk, always with the same observation. Its DINO patches are
+    # kept for as long as the policy passes the same observation tensor, so the image is encoded once per chunk. The gradient doesn't
+    # go through the image, so this gives the same result as encoding it every time. The tensor itself is kept, which makes sure the
+    # identity check can't match a new tensor that happens to reuse the memory of an old one
+    patch_cache = {"source" : None, "patches" : None}
+
     def guidance(states, actions):
         # relevant_state = {MAIN_CAMERA : states[MAIN_CAMERA][:, -1] * 255}
         relevant_state = {main_camera : states[main_camera][:, -1] * 255}
         relevant_state["proprio"] = states["proprio"][:, -1]
-        predicted_end = model.state_action_embedding(relevant_state, actions).flatten(start_dim = 1) # S X D 
+        if hasattr(model, "state_action_embedding_from_patches"):
+            if patch_cache["source"] is not states[main_camera]:
+                with torch.no_grad():
+                    patch_cache["patches"] = model.compute_image_state_patches(relevant_state)
+                patch_cache["source"] = states[main_camera]
+            predicted_end = model.state_action_embedding_from_patches(patch_cache["patches"], relevant_state, actions).flatten(start_dim = 1) # S X D 
+        else:
+            predicted_end = model.state_action_embedding(relevant_state, actions).flatten(start_dim = 1) # S X D 
         annealing_factor  = 1 #compute_anneal_weights(latent_prob_distance) # for legacy annealing approach 
         latent_prob_distance = 0
 

@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -88,7 +89,7 @@ def progress(console_path, task, plan):
     """Reads how far run_dynaguide.py got from what it printed: finished rollouts, and steps of the current one."""
     with open(console_path, "r", errors = "replace") as f:
         lines = f.read().splitlines()
-    finished = [line for line in lines if line.startswith("Rollout ") and " behavior: " in line]
+    finished = [line for line in lines if re.search(r"Rollout \d+ behavior: ", line)] # tqdm can write its bar in front of it on the same line
     reached = sum(any(target in line for target in task["targets"]) for line in finished)
     last_finished = max([i for i, line in enumerate(lines) if line in finished] + [-1])
     steps = 14 * sum(line.startswith("Guidance norms") for line in lines[last_finished + 1:]) # printed every 14 steps

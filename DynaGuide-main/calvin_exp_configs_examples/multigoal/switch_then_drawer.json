@@ -1,0 +1,41 @@
+{
+    "description": "Two independent goals in a fixed order: switch on, then open the drawer. The drawer conditions of the second step have the switch on, so they keep it on",
+    "env_setup": {
+        "drawer": "closed",
+        "switch": "off",
+        "green_light": "off"
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "avoid_behaviors": [
+        "switch_off"
+    ],
+    "goal_sequence": [
+        {
+            "name": "switch_on",
+            "behaviors": [
+                "switch_on"
+            ],
+            "pos_examples": [
+                "datasets/guidance_conditions/recombined_debug/switch_on/drawer_closed__door_*__switch_on__green_light_off.hdf5"
+            ],
+            "scale": 1.5,
+            "alpha": 30,
+            "switch": {
+                "contrast_examples": [
+                    "datasets/guidance_conditions/recombined_debug/switch_off/drawer_closed__door_*__switch_off__green_light_off.hdf5"
+                ]
+            }
+        },
+        {
+            "name": "open_drawer",
+            "behaviors": [
+                "drawer_open"
+            ],
+            "pos_examples": [
+                "datasets/guidance_conditions/recombined_debug/drawer_open/drawer_open__door_*__switch_on__green_light_off.hdf5"
+            ],
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}
