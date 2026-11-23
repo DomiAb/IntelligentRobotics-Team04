@@ -1,0 +1,19 @@
+{
+    "target_behaviors" : ["door_left", "place_in_drawer"],
+    "env_setup" : {
+        "switch" : 0,
+        "drawer" : "close",
+        "sliding_door" : "right",
+        "blocks" : {
+            "pink" : "table_center"
+        }
+    },
+    "use_neg" : false, 
+    "pos_examples": "guidance_condition_XXX.hdf5",
+    "loc_target": [
+        0.27980308053048975,
+        0.023739273400879772,
+        0.5706737502343485
+      ],
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

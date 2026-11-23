@@ -1,0 +1,12 @@
+{
+    "target_behaviors" : ["drawer_close"],
+    "env_setup" : {"drawer" : 0.16},
+    "use_neg" : false, 
+    "pos_examples": "datasets/guidance_conditions/debug_all/drawer_close.hdf5",
+    "loc_target": [
+        0.17575515911256404,
+        -0.403465742582764,
+        0.4150294248365599
+      ],
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

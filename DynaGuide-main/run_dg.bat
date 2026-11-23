@@ -1,0 +1,17 @@
+python run_dynaguide.py ^
+    --video_path results\better_eval2\output_video.mp4 ^
+    --dataset_path results\better_eval2\output_rollout.hdf5 ^
+    --dataset_obs ^
+    --json_path results\better_eval2\output_log.json ^
+    --horizon 600 ^
+    --n_rollouts 20 ^
+    --agent base_policy_300.pth ^
+    --output_folder results ^
+    --video_skip 2 ^
+    --exp_setup_config calvin_exp_configs_examples\switch_on.json ^
+    --guidance dynamics_model_5900.pth ^
+    --camera_names third_person ^
+    --scale 1.5 ^
+    --ss 4 ^
+    --alpha 30 ^
+    --save_frames
