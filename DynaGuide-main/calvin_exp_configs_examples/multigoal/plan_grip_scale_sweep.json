@@ -1,0 +1,37 @@
+{
+    "description": "Does guidance raise how often the policy grips the blue block? The grip-only task (calvin_exp_configs_examples/tasks/blue_grip_table_right.json) with the base policy and guided at scale 1.5, 3 and 5, all from the same start scenes (seed 0). Unguided, the base policy gripped in 2 of 10 rollouts of 150 steps on the MacBook. Success = the env counts the block as held. Run on the workstation with dynaguide_scripts/run_grip_scale_sweep.bat",
+    "n_rollouts": 20,
+    "horizon": 200,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "scale_1_5": {
+            "config": "datasets/guidance_conditions/blue_grip_table_right/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 1.5,
+            "seed": 0,
+            "base_policy": true
+        },
+        "scale_3": {
+            "config": "datasets/guidance_conditions/blue_grip_table_right/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 3.0,
+            "seed": 0
+        },
+        "scale_5": {
+            "config": "datasets/guidance_conditions/blue_grip_table_right/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 5.0,
+            "seed": 0
+        }
+    }
+}
