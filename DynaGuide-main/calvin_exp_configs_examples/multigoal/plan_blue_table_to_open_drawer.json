@@ -1,0 +1,30 @@
+{
+    "description": "Grip the blue block on the table and let go of it in the open drawer, the drawer never moves. Two steps (grip, release) with the latent and the oracle switch, the same task as one step, and the base policy, all from the same start scenes (same seed). The configs are made by dynaguide_scripts/make_task.py from calvin_exp_configs_examples/tasks. Run on the workstation from DynaGuide-main, see dynaguide_scripts/run_blue_table_to_open_drawer.bat",
+    "n_rollouts": 20,
+    "horizon": 500,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "two_steps": {
+            "config": "datasets/guidance_conditions/blue_table_to_open_drawer/experiment.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 0,
+            "base_policy": true
+        },
+        "one_step": {
+            "config": "datasets/guidance_conditions/blue_table_to_open_drawer_one_step/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "seed": 0
+        }
+    }
+}

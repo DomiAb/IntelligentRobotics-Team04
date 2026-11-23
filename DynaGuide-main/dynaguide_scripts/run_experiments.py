@@ -24,6 +24,8 @@ The plan:
     n_rollouts, horizon         per task
     scale, ss, alpha            guidance settings, each experiment can override them
     base_policy                 true adds a task per experiment with --scale 0 --ss 1, the base policy without guidance
+                                an experiment can override it with its own "base_policy", e.g. to run it once for two
+                                experiments that start from the same scenes
     keep_images                 true keeps the images in the rollout files, so create_guidance_conditions.py can use them
     experiments                 name : {"config" : experiment config, "conditions" : {variant : conditions}, "scale" : ..., ...}
                                 Each variant replaces pos_examples of the config: a path, a list of paths, or patterns with *.
@@ -45,7 +47,7 @@ The output folder:
 Running the tasks is shared with harvest_rollouts.py, see rollout_tasks.py.
 """
 
-EXPERIMENT_KEYS = ["config", "conditions", "switch_variants", "seed"] + GUIDANCE_SETTINGS
+EXPERIMENT_KEYS = ["config", "conditions", "switch_variants", "seed", "base_policy"] + GUIDANCE_SETTINGS
 MULTIGOAL_TARGET = "SUCCESS" # what run_dynaguide.py prints on the Rollout line of a multi-goal episode that did every step
 BASE_POLICY = "base_policy"
 
@@ -84,7 +86,7 @@ def make_tasks(plan):
         for variant, variant_config in variants.items():
             tasks.append({"folder" : f"{name}/{variant}", "config" : variant_config, "seed" : seed,
                           "guidance" : guidance, "targets" : targets, "columns" : {"experiment" : name, "variant" : variant}})
-        if plan.get("base_policy", False): # the guidance code still needs conditions to load, with scale 0 they have no effect
+        if entry.get("base_policy", plan.get("base_policy", False)): # the guidance code still needs conditions to load, with scale 0 they have no effect
             if multigoal: # the scale of a goal step would override --scale 0. The switch doesn't matter without guidance, the oracle is cheapest
                 config = {**config, "switch" : {**config.get("switch", {}), "mode" : "oracle"},
                           "goal_sequence" : [{**entry, "scale" : 0} for entry in config["goal_sequence"]]}

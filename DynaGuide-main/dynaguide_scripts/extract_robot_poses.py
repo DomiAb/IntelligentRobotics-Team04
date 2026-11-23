@@ -25,7 +25,7 @@ other joints, with or without blocks, like the poses of the debug set. See secti
         --output_folder datasets/robot_poses/first
 
     python dynaguide_scripts/extract_robot_poses.py --results results/experiments_first_1 ... \
-        --conditions datasets/guidance_conditions/debug_all/door_left.hdf5 ... --completed_only --output_folder datasets/robot_poses/ground_truth
+        --conditions datasets/guidance_conditions/debug_all/door_left.hdf5 ... --completed_only --output_folder datasets/robot_poses/articulated
 
 Run it from DynaGuide-main. Each results folder is the output of run_experiments.py or harvest_rollouts.py: every <experiment>/<variant>/
 with a DONE, a config.json, a *_log.json and a *_rollout.hdf5 is read. The rollouts don't need images, the states are enough.

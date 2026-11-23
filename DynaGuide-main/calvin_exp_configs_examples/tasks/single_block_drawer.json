@@ -1,0 +1,51 @@
+{
+    "description": "Open the drawer, grip the blue block, let go of it in the drawer, close the drawer. Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "drawer": "closed",
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "blue": {
+                "place": "table_right",
+                "offset": [
+                    0.0,
+                    -0.03
+                ],
+                "yaw": 0.0
+            },
+            "red": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "block": "blue",
+    "max": 12,
+    "steps": [
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "contrast_poses": "articulated/drawer_close",
+            "scale": 1,
+            "alpha": 40
+        },
+        {
+            "name": "grip_blue",
+            "poses": "blocks/grip_table/grip_right",
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "release_blue_in_drawer",
+            "poses": "blocks/release_drawer",
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "close_drawer",
+            "poses": "articulated/drawer_close",
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}

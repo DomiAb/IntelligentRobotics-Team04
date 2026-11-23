@@ -42,7 +42,8 @@ What changes and what doesn't, for each condition (its last frame, which is what
 
 The output folder has one folder per behavior with one condition file per combination, each with a preview:
     drawer_close/drawer_closed__door_left__switch_off__green_light_on.hdf5   drawer_close with door left, switch off and green light on
-    drawer_close/overview.png                                   every condition in every combination, black where skipped
+    drawer_close/drawer_close_all.png                           every condition in every combination, black where skipped
+                                                                (drawer_close_all_no_blocks.png with --hide_blocks)
     manifest.json                                               what was done to each condition, and what was skipped and why
 
 All images come from the simulator, also for the combination the condition already had. So the files of one run are consistent with each
@@ -266,7 +267,8 @@ def main(args):
                 save_preview(os.path.join(args.output_folder, behavior, name + ".png"), segments)
             manifest[behavior][name] = entry
             print(f"{behavior}/{name}: {len(segments)} of {len(seeds)}" + "".join(f"\n    skipped {s['seed']}: {s['reason']}" for s in entry["skipped"]))
-        save_overview(os.path.join(args.output_folder, behavior, "overview.png"), overview, [file_name(behavior, c) for c in combinations])
+        overview_name = f"{behavior}_all_no_blocks.png" if args.hide_blocks else f"{behavior}_all.png"
+        save_overview(os.path.join(args.output_folder, behavior, overview_name), overview, [file_name(behavior, c) for c in combinations])
 
     with open(os.path.join(args.output_folder, "manifest.json"), "w") as f:
         json.dump({"conditions" : args.conditions, "joints" : args.joints, "near_radius" : args.near_radius, "hide_blocks" : args.hide_blocks, "files" : manifest}, f, indent = 4)

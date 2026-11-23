@@ -1,0 +1,32 @@
+{
+    "description": "Grip the blue block on the table and let go of it in the drawer, which is open from the start and never moves. Make it with dynaguide_scripts/make_task.py, which writes the conditions and the experiment config to datasets/guidance_conditions/blue_table_to_open_drawer",
+    "env_setup": {
+        "drawer": 0.2,
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "blue": {"place": "table_right", "offset": [0.0, -0.03], "yaw": 0.0},
+            "red": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "block": "blue",
+    "max": 12,
+    "steps": [
+        {
+            "name": "grip_blue",
+            "poses": "blocks/grip_table/grip_right",
+            "contrast_poses": "articulated/drawer_open",
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "release_blue_in_drawer",
+            "poses": "blocks/release_drawer",
+            "scale": 1.5,
+            "alpha": 30
+        }
+    ]
+}

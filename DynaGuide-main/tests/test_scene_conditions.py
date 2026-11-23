@@ -1,10 +1,10 @@
 """
-Tests of the block poses and the conditions rendered into one scene (dynaguide_scripts/extract_block_poses.py,
-dynaguide_scripts/render_scene_conditions.py) and of the single-block task config. Run from DynaGuide-main:
+Tests of the block base sets and the tasks (dynaguide_scripts/extract_block_poses.py, scene_tools.py, make_task.py). Run from DynaGuide-main:
 
     python -m pytest tests/test_scene_conditions.py -v
 
-Needs the calvin_env package (PYTHONPATH with calvin/calvin_env), the scripts import the simulator. No simulator is started.
+Needs the calvin_env package (PYTHONPATH with calvin/calvin_env), the scripts import the simulator. No simulator is started. The last
+tests check the made tasks in datasets/guidance_conditions and are skipped until make_task.py has made them.
 """
 import json
 import os
@@ -22,11 +22,12 @@ pytest.importorskip("calvin_env")
 
 from core.calvin_utils import BLOCK_INDEX, HIDDEN_POS, PLACES
 from core.goal_sequence import SequentialGoalTracker, validate_multigoal_config
-from extract_block_poses import candidate_frames, frame_masks
-from render_scene_conditions import compose, held_joint_moved, scene_state
+from extract_block_poses import base_set_folder, candidate_frames, frame_kinds
+from make_task import PoseSet, Story, TaskError, check_before, default_goal, fixed_reset
+from scene_tools import block_area, held_joint_moved, joint_combinations, long_side_along_gripper, put_block_at_place, scene_name
 
-CONFIG = "calvin_exp_configs_examples/multigoal/single_block_drawer.json"
-SPEC = "calvin_exp_configs_examples/scene_conditions/single_block_drawer.json"
+TASKS = "calvin_exp_configs_examples/tasks"
+TASK_NAMES = ["blue_table_to_open_drawer", "blue_table_to_open_drawer_one_step", "single_block_drawer"]
 
 
 def load(path):
@@ -40,39 +41,37 @@ def proprio(tcp, width = 0.08, gripper = 1.0):
     return p
 
 
-def test_scene_is_the_reset_of_the_experiment():
-    spec, config = load(SPEC), load(CONFIG)
-    assert spec["scene"] == config["env_setup"]
-    state = scene_state(spec["scene"])
-    assert np.allclose(state[BLOCK_INDEX["blue"] : BLOCK_INDEX["blue"] + 3], np.array(PLACES["table_right"].low) + [0.0, -0.03, 0.0])
-    assert np.allclose(state[BLOCK_INDEX["red"] : BLOCK_INDEX["red"] + 3], HIDDEN_POS["red"])
-    assert state[0] == pytest.approx(0.27) and state[1] == 0.0 and state[3] == 0.0 and state[5] == 0.0
-
-
-def test_scene_must_be_fixed():
-    scene = dict(load(SPEC)["scene"])
-    scene["blocks"] = {**scene["blocks"], "blue": "table"} # a region, every reset would differ
-    with pytest.raises(ValueError):
-        scene_state(scene)
-    with pytest.raises(ValueError):
-        scene_state({k: v for k, v in load(SPEC)["scene"].items() if k != "switch"})
-
-
-def test_frame_masks_lifted_and_released():
-    states = np.zeros((3, 24))
-    states[:, 1] = 0.18 # drawer open
+def recording(blue, tcp, width, gripper, drawer = 0.18):
+    """A short recording with only the blue block: lists of block positions, tcp positions, gripper widths and gripper actions."""
+    states = np.zeros((len(blue), 24))
+    states[:, 1] = drawer
     for name, index in BLOCK_INDEX.items():
         states[:, index : index + 3] = HIDDEN_POS[name]
-    states[0, 12:15] = [0.17, -0.09, 0.52] # held up above the table
-    states[1, 12:15] = [0.17, -0.25, 0.3624] # on the drawer floor
-    states[2, 12:15] = [0.17, -0.09, 0.46] # on the table
-    prop = np.stack([proprio([0.17, -0.09, 0.53], width = 0.04, gripper = -1.0), proprio([0.17, -0.25, 0.45]),
-                     proprio([0.17, -0.09, 0.47], width = 0.04, gripper = -1.0)])
-    masks = frame_masks(states, prop)
-    assert list(masks[("block_lifted", "blue")]) == [True, False, False]
-    assert list(masks[("block_in_drawer_released", "blue")]) == [False, True, False]
-    states[1, 1] = 0.12 # the drawer not open as far as COMPLETED
-    assert not frame_masks(states, prop)[("block_in_drawer_released", "blue")][1]
+    states[:, 12:15] = blue
+    prop = np.stack([proprio(t, width = w, gripper = g) for t, w, g in zip(tcp, width, gripper)])
+    return states, prop
+
+# --- finding the poses -------------------------------------------------------------------------------------------------------------
+
+def test_grip_on_table_then_release_in_drawer():
+    on_table, lifted, in_drawer = [0.17, -0.09, 0.46], [0.17, -0.09, 0.55], [0.17, -0.25, 0.3624]
+    blue = [on_table, on_table, on_table, lifted, in_drawer, in_drawer]
+    tcp = [[0.17, -0.09, 0.50], [0.17, -0.09, 0.47], [0.17, -0.09, 0.47], [0.17, -0.09, 0.56], [0.17, -0.25, 0.40], [0.17, -0.25, 0.42]]
+    width = [0.08, 0.04, 0.04, 0.04, 0.04, 0.078]
+    gripper = [1, -1, -1, -1, -1, 1]
+    kinds = frame_kinds(*recording(blue, tcp, width, gripper))
+    assert list(kinds[("grip_table", "blue")]) == [False, True, True, False, False, False] # lifted 9 cm, or held in the drawer, is no grip on the table
+    assert list(kinds[("release_drawer", "blue")]) == [False, False, False, False, False, True]
+    assert not kinds[("release_table", "blue")].any() and not kinds[("grip_drawer", "blue")].any()
+    kinds = frame_kinds(*recording(blue, tcp, width, gripper, drawer = 0.12)) # the drawer not open as far as COMPLETED
+    assert not kinds[("release_drawer", "blue")].any()
+
+
+def test_a_gripper_closed_next_to_a_block_is_no_grip():
+    on_table = [0.17, -0.09, 0.46]
+    kinds = frame_kinds(*recording([on_table] * 3, [[0.17, -0.09, 0.50], [0.20, -0.09, 0.47], [0.20, -0.09, 0.47]],
+                                   [0.08, 0.0, 0.0], [1, -1, -1]))
+    assert not kinds[("grip_table", "blue")].any()
 
 
 def test_candidate_frames():
@@ -82,36 +81,130 @@ def test_candidate_frames():
     assert candidate_frames(mask, 8) == [3, 11, 19, 25]
 
 
-def test_compose_moves_the_block_of_the_pose_and_follows_the_drawer():
-    scene = scene_state(load(SPEC)["scene"])
-    pose_states = np.zeros(24)
-    pose_states[1] = 0.20
-    pose_states[18:24] = [0.2, -0.27, 0.3624, 0, 0, 0.5] # the pink block in the drawer
-    pose = {"states" : pose_states, "proprio" : proprio([0.2, -0.27, 0.45]), "block" : "pink", "file" : "x"}
-    state, reason = compose(scene, "blue", pose, {"joints" : {"drawer" : 0.18}, "block" : "pose"})
-    assert reason is None
-    assert np.allclose(state[12:18], [0.2, -0.25, 0.3624, 0, 0, 0.5]) # moved in with the drawer, 0.02 less open
-    assert np.allclose(state[18:21], HIDDEN_POS["pink"]) # the pink block stays out of the scene
-    state, _ = compose(scene, "blue", pose, {"joints" : {"drawer" : "pose"}, "block" : "drawer_center"})
-    assert np.allclose(state[12:15], [0.18, -0.085 - 0.20, PLACES["drawer_center"].low[2]])
+def test_areas_and_base_set_folders():
+    state = np.zeros(24)
+    for position, area in [([0.05, -0.09, 0.46], "table/left"), ([0.175, -0.09, 0.46], "table/center"), ([0.30, -0.12, 0.46], "table/right"),
+                           ([0.18, -0.25, 0.3624], "drawer"), ([-0.24, 0.105, 0.461], "cabinet/left"), ([0.04, 0.105, 0.461], "cabinet/right"),
+                           (HIDDEN_POS["blue"], None)]:
+        state[12:15] = position
+        assert block_area("blue", state) == area
+    assert base_set_folder("blocks", "grip_cabinet", "cabinet/left") == os.path.join("blocks", "grip_cabinet", "grip_left")
+    assert base_set_folder("blocks", "release_drawer", "drawer") == os.path.join("blocks", "release_drawer")
+
+# --- scenes and blocks -----------------------------------------------------------------------------------------------------------------
+
+def test_scene_names_and_combinations():
+    state = np.zeros(24)
+    state[[0, 1, 3, 5]] = [0.27, 0.2, 0.0, 1.0]
+    assert scene_name(state) == "drawer_open__door_left__switch_off__green_light_on"
+    assert len(joint_combinations()) == 16 and len(joint_combinations(["drawer"])) == 8
+    assert all("drawer" not in combination for combination in joint_combinations(["drawer"]))
+
+
+def test_block_at_a_drawer_place_follows_the_drawer():
+    state = np.zeros(24)
+    state[1] = 0.2
+    put_block_at_place(state, "blue", "drawer_center")
+    assert np.allclose(state[12:15], [0.18, -0.085 - 0.2, PLACES["drawer_center"].low[2]])
+
+
+def test_recolored_block_turns_its_long_side_along_the_gripper():
+    from scipy.spatial.transform import Rotation
+    gripper = [np.pi, 0.0, 0.0] # pointing down, its x axis along the world's x
+    cube = [0.0, np.pi / 2, 0.0] # its local x axis points down, its local z axis along the world's x: a pink block would stand upright
+    turned = Rotation.from_euler("xyz", long_side_along_gripper(cube, gripper)).as_matrix()
+    assert abs(turned[:, 0] @ Rotation.from_euler("xyz", gripper).as_matrix()[:, 0]) > 0.99
+    assert np.isclose(np.linalg.det(turned), 1.0)
 
 
 def test_held_joint_is_not_moved():
-    pose_states = np.zeros(24)
-    pose_states[1] = 0.0 # closed drawer, gripper at its handle
-    pose = {"states" : pose_states, "proprio" : proprio([0.175, -0.205, 0.40])}
+    pose_states = np.zeros(24) # closed drawer, gripper at its handle
     moved = pose_states.copy()
     moved[1] = 0.18
-    assert held_joint_moved(pose, moved) == "drawer"
-    assert held_joint_moved(pose, pose_states) is None
+    assert held_joint_moved(pose_states, np.array([0.175, -0.205, 0.40]), moved) == "drawer"
+    assert held_joint_moved(pose_states, np.array([0.175, -0.205, 0.40]), pose_states) is None
+
+# --- the task's story ---------------------------------------------------------------------------------------------------------------
+
+def test_tasks_have_a_fixed_reset():
+    for name in TASK_NAMES:
+        reset = fixed_reset(load(f"{TASKS}/{name}.json")["env_setup"])
+        assert np.allclose(reset[12:15], np.array(PLACES["table_right"].low) + [0.0, -0.03, 0.0])
+        assert np.allclose(reset[6:9], HIDDEN_POS["red"]) and np.allclose(reset[18:21], HIDDEN_POS["pink"])
+    env_setup = dict(load(f"{TASKS}/single_block_drawer.json")["env_setup"])
+    with pytest.raises(TaskError):
+        fixed_reset({**env_setup, "blocks" : {**env_setup["blocks"], "blue" : "table"}}) # a region, every reset would differ
+    with pytest.raises(TaskError):
+        fixed_reset({key : value for key, value in env_setup.items() if key != "switch"})
 
 
-def test_single_block_task_succeeds_in_order():
-    config = load(CONFIG)
-    assert [step.name for step in validate_multigoal_config(config)] == ["open_drawer", "pick_block", "place_block_in_drawer", "close_drawer"]
+def test_story_moves_a_block_in_the_drawer_with_it():
+    story = Story(fixed_reset(load(f"{TASKS}/single_block_drawer.json")["env_setup"]), "blue")
+    story.set_joint("drawer", 0.2)
+    assert np.allclose(story.state[12:15], np.array(PLACES["table_right"].low) + [0.0, -0.03, 0.0]) # on the table, stays
+    put_block_at_place(story.state, "blue", "drawer_center")
+    story.set_joint("drawer", 0.0)
+    assert np.allclose(story.state[12:15], [0.18, -0.085, PLACES["drawer_center"].low[2]]) and block_area("blue", story.state) == "drawer"
+
+
+def test_steps_must_fit_the_story(tmp_path):
+    for folder in ["articulated/drawer_open", "blocks/grip_table/grip_left", "blocks/grip_table/grip_right", "blocks/release_drawer"]:
+        (tmp_path / folder).mkdir(parents = True)
+    story = Story(fixed_reset(load(f"{TASKS}/single_block_drawer.json")["env_setup"]), "blue") # drawer closed, blue on the right of the table
+    with pytest.raises(TaskError, match = "grip it at table/left"):
+        check_before(story, PoseSet("blocks/grip_table/grip_left", str(tmp_path)), "grip")
+    with pytest.raises(TaskError, match = "drawer open"):
+        check_before(story, PoseSet("blocks/release_drawer", str(tmp_path)), "release")
+    check_before(story, PoseSet("blocks/grip_table/grip_right", str(tmp_path)), "grip")
+    story.held = True
+    with pytest.raises(TaskError, match = "held"):
+        check_before(story, PoseSet("articulated/drawer_open", str(tmp_path)), "open")
+    assert default_goal(PoseSet("articulated/drawer_open", str(tmp_path)), "blue") == {"behaviors" : ["drawer_open"]}
+    assert default_goal(PoseSet("blocks/grip_table/grip_right", str(tmp_path)), "blue") == {"where" : {"blocks" : {"blue" : "held"}}}
+    assert default_goal(PoseSet("blocks/release_drawer", str(tmp_path)), "blue") == {"where" : {"blocks" : {"blue" : ["drawer", "released"]}}}
+
+# --- the made tasks -----------------------------------------------------------------------------------------------------------------
+
+def made(name):
+    folder = os.path.join("datasets", "guidance_conditions", name)
+    if not os.path.isfile(os.path.join(folder, "experiment.json")):
+        pytest.skip(f"make the task {name} first (make_task.py)")
+    return folder
+
+
+@pytest.mark.parametrize("name", TASK_NAMES)
+def test_made_task_follows_its_story(name):
+    import h5py
+    from core.guidance_conditions import StateView, find_frames
+    folder = made(name)
+    config, manifest = load(os.path.join(folder, "experiment.json")), load(os.path.join(folder, "manifest.json"))
+    validate_multigoal_config(config)
+    reset = fixed_reset(config["env_setup"])
+    on_table = lambda s: np.allclose(s[12:15], reset[12:15], atol = 1e-6)
+    blue = lambda s, p, spec: bool(find_frames(StateView(s, p), {"blocks" : {"blue" : spec}})[0])
+    expected = {"open_drawer_contrast" : lambda s, p: on_table(s) and s[1] < 0.015,
+                "open_drawer" : lambda s, p: on_table(s) and s[1] >= 0.15,
+                "grip_blue_contrast" : lambda s, p: on_table(s) and s[1] >= 0.15,
+                "grip_blue" : lambda s, p: blue(s, p, "held") and s[1] >= 0.15,
+                "release_blue_in_drawer_contrast" : lambda s, p: on_table(s),
+                "release_blue_in_drawer" : lambda s, p: blue(s, p, ["drawer", "released", "resting"]) and s[1] >= 0.15,
+                "close_drawer" : lambda s, p: blue(s, p, "drawer") and s[1] < 0.015}
+    for step in manifest["steps"]:
+        path = os.path.join(folder, step["name"] + ".hdf5")
+        with h5py.File(path, "r") as file:
+            for demo in file["data"]:
+                s, p = file[f"data/{demo}/obs/states"][-1], file[f"data/{demo}/obs/proprio"][-1]
+                assert [c for c, i in BLOCK_INDEX.items() if s[i] < 2.0] == ["blue"], f"{path} {demo}: not exactly one block in view"
+                assert expected[step["name"]](s, p), f"{path} {demo}: the blue block or the drawer isn't what the story says"
+                for joint in [0, 3, 5]: # door, switch and green light as in the reset
+                    assert s[joint] == pytest.approx(reset[joint]), f"{path} {demo}: joint {joint} differs from the reset"
+
+
+def test_made_single_block_task_succeeds_in_order():
+    config = load(os.path.join(made("single_block_drawer"), "experiment.json"))
+    assert [step["name"] for step in config["goal_sequence"]] == ["open_drawer", "grip_blue", "release_blue_in_drawer", "close_drawer"]
     tracker = SequentialGoalTracker(config)
-    state = scene_state(config["env_setup"])
-    hand = proprio([0.4, -0.3, 0.6])
+    state = fixed_reset(config["env_setup"])
     path = list()
     def at(drawer = None, blue = None, tcp = None, held = False):
         s = (path[-1][0] if path else state).copy()
@@ -122,33 +215,9 @@ def test_single_block_task_succeeds_in_order():
         p = proprio(tcp if tcp is not None else [0.4, -0.3, 0.6], width = 0.04 if held else 0.08, gripper = -1.0 if held else 1.0)
         path.append((s, p))
     at(); at(drawer = 0.10); at(drawer = 0.19, tcp = [0.175, -0.39, 0.40]) # open
-    at(blue = [0.175, -0.09, 0.47], tcp = [0.175, -0.09, 0.47], held = True)
-    at(blue = [0.175, -0.09, 0.53], tcp = [0.175, -0.09, 0.53], held = True) # lifted
+    at(blue = [0.30, -0.12, 0.46], tcp = [0.30, -0.12, 0.47], held = True) # gripped
+    at(blue = [0.30, -0.12, 0.53], tcp = [0.30, -0.12, 0.53], held = True) # lifted
     at(blue = [0.18, -0.28, 0.3624], tcp = [0.18, -0.28, 0.45]) # in the drawer, let go
     at(drawer = 0.10, blue = [0.18, -0.19, 0.3624]); at(drawer = 0.0, blue = [0.18, -0.09, 0.3624], tcp = [0.175, -0.2, 0.40]) # closed
     done = [tracker.update(s, p) for s, p in path]
     assert tracker.success and done[-1] and tracker.steps_completed == 4
-
-
-RENDERED = "datasets/guidance_conditions/single_block_drawer"
-
-
-@pytest.mark.skipif(not os.path.isdir(RENDERED), reason = "render the conditions first, see run_single_block_drawer.bat")
-def test_rendered_conditions_show_one_block_where_the_step_says():
-    import h5py
-    from core.guidance_conditions import StateView, find_frames
-    config = load(CONFIG)
-    start = scene_state(config["env_setup"])[12:15]
-    where = {"drawer_closed_block_on_table" : lambda s, p: np.allclose(s[12:15], start, atol = 1e-3) and s[1] < 0.015,
-             "drawer_open_block_on_table" : lambda s, p: np.allclose(s[12:15], start, atol = 1e-3) and s[1] >= 0.15,
-             "block_lifted_drawer_open" : lambda s, p: s[1] >= 0.15 and find_frames(StateView(s, p), {"blocks" : {"blue" : "lifted"}})[0],
-             "block_in_open_drawer_released" : lambda s, p: s[1] >= 0.15
-                 and find_frames(StateView(s, p), {"blocks" : {"blue" : ["drawer", "released", "resting"]}})[0],
-             "drawer_closed_block_in_drawer" : lambda s, p: s[1] < 0.015 and find_frames(StateView(s, p), {"blocks" : {"blue" : "drawer"}})[0]}
-    for name, check in where.items():
-        with h5py.File(os.path.join(RENDERED, name + ".hdf5"), "r") as file:
-            for demo in file["data"]:
-                s, p = file[f"data/{demo}/obs/states"][-1], file[f"data/{demo}/obs/proprio"][-1]
-                assert [c for c, i in BLOCK_INDEX.items() if s[i] < 2.0] == ["blue"], f"{name} {demo}: not exactly one block in view"
-                assert check(s, p), f"{name} {demo}: the blue block isn't where the step says"
-                assert s[0] > 0.26 and s[3] < 0.01 and s[5] == 0.0, f"{name} {demo}: door, switch or light differ from the reset"

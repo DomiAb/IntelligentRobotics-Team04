@@ -231,6 +231,7 @@ JOINT_WORD_RANGES["button"] = {"released" : (-math.inf, 0.002), "pressed" : (0.0
 BLOCK_POSITION = {"red" : 6, "blue" : 12, "pink" : 18}
 BLOCK_REST_Z = (0.362, 0.46) # resting in the drawer, or on the table and in the cabinet
 HELD_DISTANCE, HELD_WIDTH, OPEN_WIDTH = 0.04, 0.06, 0.07 # the gripper is 0.08 wide when open and around 0.04 on a block
+HELD_MIN_WIDTH = 0.03 # narrower means the gripper closed on nothing, e.g. next to a block it pushes
 CABINET_MIDDLE_X, CABINET_FRONT_Y = -0.06, 0.03
 GRIPPER_WIDTH, GRIPPER_ACTION = 6, 14 # index in the proprio
 DEFAULT_TCP_RADIUS = 0.08
@@ -270,7 +271,8 @@ def _block_word_mask(color, word, recording):
     in_cabinet = resting_height & (y > CABINET_FRONT_Y)
     on_table = resting_height & (y <= CABINET_FRONT_Y)
     near_tcp = np.linalg.norm(recording.proprio[:, :3] - position, axis = 1) < HELD_DISTANCE
-    held = near_tcp & (recording.proprio[:, GRIPPER_WIDTH] < HELD_WIDTH) & (recording.proprio[:, GRIPPER_ACTION] < 0)
+    width = recording.proprio[:, GRIPPER_WIDTH]
+    held = near_tcp & (width > HELD_MIN_WIDTH) & (width < HELD_WIDTH) & (recording.proprio[:, GRIPPER_ACTION] < 0)
     on_drawer_floor = np.abs(z - BLOCK_REST_Z[0]) < 0.015
     masks = {"drawer" : z < 0.40,
              "table" : on_table,

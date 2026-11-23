@@ -1,0 +1,33 @@
+{
+    "description": "The same task as blue_table_to_open_drawer.json in one step: only the end state, blue released in the drawer. Compares one goal with the split into grip and release",
+    "env_setup": {
+        "drawer": 0.2,
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "blue": {
+                "place": "table_right",
+                "offset": [
+                    0.0,
+                    -0.03
+                ],
+                "yaw": 0.0
+            },
+            "red": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "block": "blue",
+    "max": 12,
+    "steps": [
+        {
+            "name": "release_blue_in_drawer",
+            "poses": "blocks/release_drawer",
+            "scale": 1.5,
+            "alpha": 30,
+            "contrast_poses": "articulated/drawer_open"
+        }
+    ]
+}

@@ -58,7 +58,7 @@ echo [4/4] Every scene, without blocks
 python dynaguide_scripts\recombine_conditions.py --conditions %SEEDS% --hide_blocks --output_folder %OUT%\recombined_debug_no_blocks || goto :failed
 
 echo.
-echo Done. Look at the overview.png of each behavior in %CD%\%OUT%\recombined_debug and %CD%\%OUT%\recombined_debug_no_blocks
+echo Done. Look at the <behavior>_all.png (_all_no_blocks.png) of each behavior in %CD%\%OUT%\recombined_debug and %CD%\%OUT%\recombined_debug_no_blocks
 exit /b 0
 
 :failed
