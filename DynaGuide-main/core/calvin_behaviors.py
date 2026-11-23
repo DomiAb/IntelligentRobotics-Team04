@@ -9,8 +9,10 @@ Goal conditions for CALVIN rollouts. The environment has no success signal of it
 from the states and compare this to the target_behaviors / avoid_behaviors of the experiment config. run_dynaguide.py only
 asks this file whether the goal is decided, it doesn't look at the state itself.
 
-The thresholds are the end states from the segmentation in data_processing_calvin/calvin_to_labeled_hdf5.py, which define what
-counts as a behavior in the guidance conditions. They are stricter than analyze_calvin_touch.py, which looks for the first small motion.
+A joint behavior counts when the joint starts on one side (ARTICULATED, the authors' segmentation thresholds of
+data_processing_calvin/calvin_to_labeled_hdf5.py) and reaches the COMPLETED value close to its resting position on the other side.
+The authors' end thresholds only show that the motion got going, e.g. a drawer that is half open. ARTICULATED stays as it is,
+because the guidance conditions are cut and named with it (core/guidance_conditions.py, recombine_conditions.py).
 
 The sanity_ behaviors replicate the original paper instead, to compare against the authors' numbers: the episode ends at the first
 small change (check_state_difference) and is scored by what analyze_calvin_touch.py labels as the first interaction.
@@ -25,6 +27,14 @@ ARTICULATED = [(0, 0.05, 0.25, "door_left", "door_right"),
                (1, 0.05, 0.10, "drawer_open", "drawer_close"),
                (3, 0.01, 0.07, "switch_on", "switch_off"),
                (5, 0.2, 0.8, "button_on", "button_off")]
+
+# where a behavior counts as finished, used by GoalTracker instead of the end threshold of ARTICULATED. Chosen from the resting
+# positions in the debug set (in brackets), with a margin so a joint that stops a little short still counts:
+# door right [0 to 0.025] and left [0.272 to 0.28], drawer closed [0] and open [0.178 to 0.217], switch off [0] and on [0.088]
+# The button isn't here: green_light is 0 or 1, so ARTICULATED already means the light switched
+COMPLETED = {"door_left" : 0.26, "door_right" : 0.035,
+             "drawer_open" : 0.15, "drawer_close" : 0.015,
+             "switch_on" : 0.08, "switch_off" : 0.008}
 
 BLOCKS = {"red_displace" : 6, "blue_displace" : 12, "pink_displace" : 18} # index of the block position
 BLOCK_MOVED = 0.01
@@ -116,10 +126,10 @@ class GoalTracker:
 
     def detect(self, state, proprio):
         detected = list()
-        for idx, low, high, rising, falling in ARTICULATED:
-            if self.start_state[idx] < low and state[idx] > high:
+        for idx, low, high, rising, falling in ARTICULATED: # start beyond the authors' threshold, end at COMPLETED
+            if self.start_state[idx] < low and state[idx] > COMPLETED.get(rising, high):
                 detected.append(rising)
-            if self.start_state[idx] > high and state[idx] < low:
+            if self.start_state[idx] > high and state[idx] < COMPLETED.get(falling, low):
                 detected.append(falling)
         for name, idx in BLOCKS.items():
             moved = np.linalg.norm(state[idx:idx + 3] - self.start_state[idx:idx + 3])
@@ -184,7 +194,10 @@ def summarize_behaviors(episode_behaviors, config):
 
 
 def replay_episode(states, proprio, config):
-    """Runs the GoalTracker over a recorded episode, stopping where a rollout would have stopped."""
+    """
+    Runs the GoalTracker over a recorded episode, stopping where a rollout would have stopped. states and proprio are the state
+    before the first step followed by the state after every step, see evaluate_dataset.
+    """
     states, proprio = np.asarray(states), np.asarray(proprio)
     if states.ndim == 3: # collapse this if there's framestacking for the policy
         states, proprio = states[:, -1], proprio[:, -1]
@@ -197,6 +210,15 @@ def replay_episode(states, proprio, config):
     return tracker.behaviors
 
 
+def episode_states(demo):
+    """The start state and the state after every step, like run_dynaguide.py feeds them. Files without next_obs miss the last step."""
+    states, proprio = demo["obs"]["states"][()], demo["obs"]["proprio"][()]
+    if "next_obs" in demo:
+        states = np.concatenate([states[:1], demo["next_obs"]["states"][()]])
+        proprio = np.concatenate([proprio[:1], demo["next_obs"]["proprio"][()]])
+    return states, proprio
+
+
 def evaluate_dataset(hdf5_name, config):
     """Evaluates a rollout file that was saved with --dataset_path and --dataset_obs."""
     with h5py.File(hdf5_name, "r") as dataset:
@@ -204,7 +226,7 @@ def evaluate_dataset(hdf5_name, config):
         demos = sorted(data_grp.keys(), key = lambda x: int(x.split("_")[-1]))
         if len(demos) > 0 and "obs" not in data_grp[demos[0]]:
             raise KeyError(f"{hdf5_name} has no observations. Run the rollouts with --dataset_obs")
-        episode_behaviors = [replay_episode(data_grp[demo]["obs"]["states"][()], data_grp[demo]["obs"]["proprio"][()], config) for demo in demos]
+        episode_behaviors = [replay_episode(*episode_states(data_grp[demo]), config) for demo in demos]
     summary = summarize_behaviors(episode_behaviors, config)
     summary["Num_Episode"] = len(demos)
     return summary
