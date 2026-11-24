@@ -1,0 +1,26 @@
+{
+    "description": "drawer_button_door in one step, the control for the three steps: guided only to the end state (drawer open, green LED on, door right), with the conditions of the last step of drawer_button_door, which show exactly that. Success = all three behaviors happen. Shows whether splitting the task into steps is what helps. Needs datasets/guidance_conditions/drawer_button_door (make_task.py with calvin_exp_configs_examples/tasks/drawer_button_door.json), see dynaguide_scripts/run_drawer_button_door.bat",
+    "env_setup": {
+        "drawer": "closed",
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "red": "hidden",
+            "blue": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "goal_sequence": [
+        {
+            "name": "drawer_button_door",
+            "behaviors": [
+                "drawer_open",
+                "button_on",
+                "door_right"
+            ],
+            "pos_examples": "datasets/guidance_conditions/drawer_button_door/door_right.hdf5"
+        }
+    ]
+}

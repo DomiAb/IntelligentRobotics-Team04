@@ -1,0 +1,31 @@
+{
+    "description": "Three articulated behaviors in a row, no blocks: open the drawer, press the button so the green LED turns on, slide the door from left to right. Each step is a behavior the base policy does on its own, so the result measures the multi-goal part (does the switch move on at the right time). No scale or alpha, the plan sets them (plan_drawer_button_door.json). Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "drawer": "closed",
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "red": "hidden",
+            "blue": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "steps": [
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "contrast_poses": "articulated/drawer_close"
+        },
+        {
+            "name": "button_on",
+            "poses": "articulated/button_on"
+        },
+        {
+            "name": "door_right",
+            "poses": "articulated/door_right"
+        }
+    ]
+}

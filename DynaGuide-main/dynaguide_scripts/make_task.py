@@ -70,6 +70,7 @@ TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_b
 STEP_EXTRA_KEYS = {"poses", "near", "max", "block_after", "contrast_poses"}
 GOAL_KEYS = {"behaviors", "where", "any_behaviors"}
 MAX_DRAWER_SHIFT = 0.02
+BUTTON_INDEX = 2 # the button joint in the scene state, the green light (STATE_INDEX) is what it toggles
 HELD = "held"
 BASE_COLOR = "blue"
 
@@ -173,6 +174,8 @@ def render_step(sim, story, pose_set, entry, block, near = None):
             if pose_set.joint == "drawer" and block is not None and not story.held and block_area(block, story.state) == "drawer":
                 state[BLOCK_INDEX[block] + 1] -= value - state[STATE_INDEX["drawer"]] # the block lies in the drawer and moves with it
             state[STATE_INDEX[pose_set.joint]] = value
+            if pose_set.joint == "green_light": # the pose presses the button down, the scene's button is released. The button
+                state[BUTTON_INDEX] = pose["states"][BUTTON_INDEX] # springs back, so only this condition shows it pressed
         else:
             source = str(pose["attrs"].get("block", BASE_COLOR))
             position = pose["states"][BLOCK_INDEX[source] : BLOCK_INDEX[source] + 3]
@@ -310,7 +313,8 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
         manifest["steps"].append({"name" : name, "poses" : entry["poses"], "base_file" : path, "scene" : scene,
                                   "conditions" : kept, "skipped" : skipped})
         if len(rendered) == 0:
-            raise TaskError(f"step {name}: no condition fits, see the skipped poses in {output}/manifest.json")
+            reasons = "\n".join(f"    {entry['file']}: {entry['reason']}" for entry in skipped)
+            raise TaskError(f"step {name}: no condition of {path} fits the scene {scene}. The skipped poses:\n{reasons}")
         condition_file = os.path.join(output, f"{name}.hdf5")
         segments = write_rendered(condition_file, rendered, name, attributes)
         save_preview(condition_file[:-5] + ".png", segments)

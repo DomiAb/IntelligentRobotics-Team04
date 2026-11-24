@@ -1,0 +1,30 @@
+{
+    "description": "Three articulated behaviors in a row, no blocks: open the drawer, press the button (green LED on), slide the door from left to right. The three steps with the latent and the oracle switch and the base policy, and the same task guided only to the end state in one step, all from the same start scenes (seed 0; the diffusion noise isn't seeded, so runs are random draws). Run on the workstation with dynaguide_scripts/run_drawer_button_door.bat",
+    "n_rollouts": 20,
+    "horizon": 800,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "three_steps": {
+            "config": "datasets/guidance_conditions/drawer_button_door/experiment.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 0,
+            "base_policy": true
+        },
+        "one_step": {
+            "config": "calvin_exp_configs_examples/multigoal/drawer_button_door_one_step.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "seed": 0
+        }
+    }
+}
