@@ -1,5 +1,5 @@
 @echo off
-rem Grip the blue block on the table and let go of it in the drawer, which is open from the start and never moves. See "Multigoal guidance.ipynb", section 13.
+rem Grip the blue block on the table and let go of it in the drawer, which is open from the start and never moves. See "Multigoal guidance.ipynb", section 1.
 rem Run it in the Anaconda Prompt with the dynaguide env active. It works from any folder:
 rem     conda activate dynaguide
 rem     DynaGuide-main\dynaguide_scripts\run_blue_table_to_open_drawer.bat

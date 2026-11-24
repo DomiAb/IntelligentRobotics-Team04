@@ -1,0 +1,24 @@
+{
+    "description": "blue_two_stage.json in one step: only the end state, blue released in the drawer. No scale or alpha, the plan sets them. Shows whether splitting the task into grip and release is what helps",
+    "env_setup": {
+        "drawer": 0.2,
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "blue": {"place": "table_right", "offset": [0.0, -0.03], "yaw": 0.0},
+            "red": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "block": "blue",
+    "max": 12,
+    "steps": [
+        {
+            "name": "release_blue_in_drawer",
+            "poses": "blocks/release_drawer",
+            "contrast_poses": "articulated/drawer_open"
+        }
+    ]
+}

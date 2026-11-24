@@ -1,5 +1,5 @@
 @echo off
-rem Sets up the base sets of the robot_poses collection, see "Multigoal guidance.ipynb", section 13. Run it in the Anaconda Prompt with
+rem Sets up the base sets of the robot_poses collection, see "Multigoal guidance.ipynb", section 1.1. Run it in the Anaconda Prompt with
 rem the dynaguide env active, from any folder. The run_*.bat scripts of the block experiments call it first.
 rem
 rem     datasets\robot_poses\articulated\<behavior>\<scene>.hdf5     drawer, door, switch and button at their goal, without blocks, in every

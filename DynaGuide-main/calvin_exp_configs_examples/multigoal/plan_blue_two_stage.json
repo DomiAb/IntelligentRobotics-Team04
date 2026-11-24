@@ -1,0 +1,30 @@
+{
+    "description": "Two-stage grip at the scale that gripped in the sweep (scale 5: 6/20 grips, base policy 0/20). Grip the blue block on the table, let go of it in the open drawer. Two steps with the latent and the oracle switch, the same task as one step (only the end state), and the base policy, all from the same start scenes (seed 0). The tasks have no scale of their own, so scale 5 here applies to every step. Run on the workstation with dynaguide_scripts/run_blue_two_stage.bat",
+    "n_rollouts": 20,
+    "horizon": 500,
+    "scale": 5.0,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "two_steps": {
+            "config": "datasets/guidance_conditions/blue_two_stage/experiment.json",
+            "switch_variants": {
+                "latent": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 0,
+            "base_policy": true
+        },
+        "one_step": {
+            "config": "datasets/guidance_conditions/blue_two_stage_one_step/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "seed": 0
+        }
+    }
+}

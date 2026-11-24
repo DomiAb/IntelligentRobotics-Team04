@@ -1,0 +1,38 @@
+{
+    "description": "The scene of the grip sweep: blue on the right third of the table at (0.30, -0.12), drawer open (0.2). One step: only the end state, the blue block lying in the open drawer, so the policy may get it there any way it likes (grip and place, or push it off the table edge into the drawer, CALVIN's push_into_drawer). The conditions are the release_drawer poses. Success = the block rests on the drawer floor, whether or not it was held (the default [\"drawer\", \"released\"] would also count a block that fell to the floor, z < 0.40). No scale or alpha, the plan sets them (plan_blue_drawer_end.json). Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "drawer": 0.2,
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "blue": {
+                "place": "table_right",
+                "offset": [
+                    0.0,
+                    -0.03
+                ],
+                "yaw": 0.0
+            },
+            "red": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "block": "blue",
+    "max": 12,
+    "steps": [
+        {
+            "name": "blue_in_drawer",
+            "poses": "blocks/release_drawer",
+            "where": {
+                "blocks": {
+                    "blue": [
+                        "drawer",
+                        "resting"
+                    ]
+                }
+            }
+        }
+    ]
+}

@@ -1,5 +1,5 @@
 @echo off
-rem Open the drawer, grip the blue block, let go of it in the drawer, close the drawer, with only the blue block. See "Multigoal guidance.ipynb", section 13.
+rem Open the drawer, grip the blue block, let go of it in the drawer, close the drawer, with only the blue block. See "Multigoal guidance.ipynb", sections 1 and 12.
 rem Run it in the Anaconda Prompt with the dynaguide env active. It works from any folder:
 rem     conda activate dynaguide
 rem     DynaGuide-main\dynaguide_scripts\run_single_block_drawer.bat

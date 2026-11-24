@@ -1,6 +1,6 @@
 @echo off
 rem Does guidance raise how often the policy grips the blue block? A check of DynaGuide itself, before tuning multi-goal guidance around
-rem it. See "Multigoal guidance.ipynb", section 14. Run it in the Anaconda Prompt with the dynaguide env active, from any folder:
+rem it. See "Multigoal guidance.ipynb", section 13. Run it in the Anaconda Prompt with the dynaguide env active, from any folder:
 rem     conda activate dynaguide
 rem     DynaGuide-main\dynaguide_scripts\run_grip_scale_sweep.bat
 rem

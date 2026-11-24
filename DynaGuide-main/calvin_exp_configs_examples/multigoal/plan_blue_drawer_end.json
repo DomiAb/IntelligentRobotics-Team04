@@ -1,0 +1,54 @@
+{
+    "description": "Guide only to the end state: the blue block lying in the open drawer, however the policy gets it there. Scale sweep in the scene of the grip sweep (block on the right third) with the base policy, and the same at scales 5 and 10 with the block in front of the drawer (center third), where CALVIN's pushes into the drawer start. 20 rollouts of up to 300 steps each, the same start scenes (seed 0; the diffusion noise isn't seeded, so runs are random draws, pool them). Run on the workstation with dynaguide_scripts/run_blue_drawer_end.bat",
+    "n_rollouts": 20,
+    "horizon": 300,
+    "scale": 5.0,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "experiments": {
+        "right_scale_1_5": {
+            "config": "datasets/guidance_conditions/blue_drawer_end_right/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 1.5,
+            "seed": 0,
+            "base_policy": true
+        },
+        "right_scale_5": {
+            "config": "datasets/guidance_conditions/blue_drawer_end_right/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 5.0,
+            "seed": 0
+        },
+        "right_scale_10": {
+            "config": "datasets/guidance_conditions/blue_drawer_end_right/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 10.0,
+            "seed": 0
+        },
+        "center_scale_5": {
+            "config": "datasets/guidance_conditions/blue_drawer_end_center/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 5.0,
+            "seed": 0,
+            "base_policy": true
+        },
+        "center_scale_10": {
+            "config": "datasets/guidance_conditions/blue_drawer_end_center/experiment.json",
+            "switch_variants": {
+                "guided": {}
+            },
+            "scale": 10.0,
+            "seed": 0
+        }
+    }
+}
