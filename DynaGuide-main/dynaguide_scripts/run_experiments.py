@@ -27,6 +27,8 @@ The plan:
                                 an experiment can override it with its own "base_policy", e.g. to run it once for two
                                 experiments that start from the same scenes
     keep_images                 true keeps the images in the rollout files, so create_guidance_conditions.py can use them
+    video_skip                  every how many steps a frame goes into the video, 2 by default. Rendering them takes almost half of
+                                the time of a rollout, so a higher number makes long runs faster
     experiments                 name : {"config" : experiment config, "conditions" : {variant : conditions}, "scale" : ..., ...}
                                 Each variant replaces pos_examples of the config: a path, a list of paths, or patterns with *.
                                 Without "conditions", the config's own pos_examples is the only variant, called "guided"

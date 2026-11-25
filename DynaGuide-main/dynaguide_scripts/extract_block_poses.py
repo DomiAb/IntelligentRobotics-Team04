@@ -247,28 +247,38 @@ def base_set_folder(output_folder, kind, area):
 OPEN_COMPARTMENT_DOOR = {"cabinet/left" : "right", "cabinet/right" : "left"}
 
 
+def fixed_joints(kind, area):
+    """The joints of a base set that don't take both states: {joint : word}, None keeps the joint of each pose."""
+    return {"drawer" : None} if kind.endswith("drawer") else {"sliding_door" : OPEN_COMPARTMENT_DOOR[area]} if area in OPEN_COMPARTMENT_DOOR else {}
+
+
+def pose_in_scene(sim, pose, fixed, combination, color = BASE_COLOR):
+    """The state of a pose in a scene with its block in color, and why it doesn't fit there (None if it does). Leaves it set in sim."""
+    state = pose["states"].copy()
+    for joint, word in {**{joint : word for joint, word in fixed.items() if word is not None}, **combination}.items():
+        state[STATE_INDEX[joint]] = STATE_WORDS[joint][word]
+    state[4] = float(state[STATE_INDEX["switch"]] > sim.switch_threshold) # the lightbulb follows the switch
+    if pose["block"] != color:
+        move_block(state, pose["states"], pose["block"], color, pose["proprio"][3:6])
+        hide_block(state, pose["block"])
+    joint = held_joint_moved(pose["states"], pose["proprio"][0:3], state)
+    return state, f"the gripper is at the {joint}" if joint is not None else \
+        new_contacts(sim, pose["states"], state, pose["proprio"], {color : pose["block"]})
+
+
 def build_base_set(sim, poses, kind, area, folder, color = BASE_COLOR):
     """
     One condition file per scene: every pose with its block replaced by the blue one, in every combination of the joints. A pose in the
     drawer keeps its drawer (the block lies in it), a pose in the cabinet has the door where its compartment is open. A pose is left
     out of a scene where it doesn't fit: the gripper is at a joint the scene moves, or something would be inside something.
     """
-    fixed = {"drawer" : None} if kind.endswith("drawer") else {"sliding_door" : OPEN_COMPARTMENT_DOOR[area]} if area in OPEN_COMPARTMENT_DOOR else {}
+    fixed = fixed_joints(kind, area)
     os.makedirs(folder, exist_ok = True)
     rows, report = list(), {"scenes" : dict(), "skipped" : list()}
     for combination in joint_combinations(fixed):
         rendered, attributes = list(), list()
         for pose in poses:
-            state = pose["states"].copy()
-            for joint, word in {**{joint : word for joint, word in fixed.items() if word is not None}, **combination}.items():
-                state[STATE_INDEX[joint]] = STATE_WORDS[joint][word]
-            state[4] = float(state[STATE_INDEX["switch"]] > sim.switch_threshold) # the lightbulb follows the switch
-            if pose["block"] != color:
-                move_block(state, pose["states"], pose["block"], color, pose["proprio"][3:6])
-                hide_block(state, pose["block"])
-            joint = held_joint_moved(pose["states"], pose["proprio"][0:3], state)
-            problem = f"the gripper is at the {joint}" if joint is not None else \
-                new_contacts(sim, pose["states"], state, pose["proprio"], {color : pose["block"]})
+            state, problem = pose_in_scene(sim, pose, fixed, combination, color)
             if problem is not None:
                 report["skipped"].append({"scene" : scene_name(state), "source" : pose["info"]["source"], "reason" : problem})
                 continue

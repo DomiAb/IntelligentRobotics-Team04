@@ -1,0 +1,11 @@
+{
+    "target_behaviors": [
+        "door_left"
+    ],
+    "env_setup": {
+        "sliding_door": 0
+    },
+    "use_neg": false,
+    "pos_examples": "datasets/robot_poses/articulated/poses/door_left.hdf5",
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json"
+}

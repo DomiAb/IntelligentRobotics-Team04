@@ -129,7 +129,7 @@ def run_task(task, plan, args, keep_images):
 
     command = [sys.executable, RUN_SCRIPT, "--agent", args.agent, "--guidance", args.guidance, "--exp_setup_config", config_path,
                "--output_folder", folder, "--n_rollouts", str(plan["n_rollouts"]), "--horizon", str(plan["horizon"]),
-               "--seed", str(args.seed + task["seed"]), "--camera_names", "third_person", "--video_skip", "2",
+               "--seed", str(args.seed + task["seed"]), "--camera_names", "third_person", "--video_skip", str(plan.get("video_skip", 2)),
                "--no_collage", "--no_live_render"] + (["--dataset_images"] if keep_images else [])
     for key in GUIDANCE_SETTINGS:
         command += ["--" + key, str(task["guidance"][key])]

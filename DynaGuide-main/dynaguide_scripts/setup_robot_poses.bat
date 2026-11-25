@@ -22,6 +22,8 @@ if exist "%POSES%\articulated\drawer_open\" (
         echo %POSES%\articulated has no drawer_open folder. Move it away, then start again to make the sets without blocks.
         exit /b 1
     )
+    if not exist "datasets\guidance_conditions\debug_all\drawer_open.hdf5" goto :no_sources
+    if not exist "datasets\guidance_conditions\button_pressed\button_on.hdf5" goto :no_sources
     echo Articulated poses without blocks, in every scene
     python dynaguide_scripts\recombine_conditions.py --hide_blocks --output_folder %POSES%\articulated || exit /b 1
 )
@@ -46,3 +48,11 @@ if exist "%DEBUG%\validation\" (
 )
 echo Look at the *_all.png files in %CD%\%POSES%\blocks
 exit /b 0
+
+:no_sources
+echo.
+echo %POSES%\articulated is missing, and so are the recordings it is made from:
+echo     datasets\guidance_conditions\debug_all\*.hdf5 and datasets\guidance_conditions\button_pressed\*.hdf5
+echo These are not in git. Copy the whole folder datasets\robot_poses from the MacBook (it has the sets the tasks were checked
+echo with), or copy those two source folders and start again to make the sets here.
+exit /b 1

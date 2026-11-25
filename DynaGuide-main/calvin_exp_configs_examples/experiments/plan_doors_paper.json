@@ -1,0 +1,33 @@
+{
+    "description": "The doors as in the paper: scene, reset poses, scale, alpha, ss, horizon and 50 rollouts from paper_experiments/calvin_articulated_object.sh and calvin_exp_configs_examples/door_*.json, everything but the door random. Two sets of the same 20 robot poses: original (the recorded image and scene, as in the paper) and recombined (rendered without blocks in all 8 scenes, 160 conditions), and the base policy from the same start scenes. A rollout ends at the full slide (or 400 steps); dynaguide_scripts/score_paper_rule.py also scores it with the authors' rule. Run on the workstation with dynaguide_scripts/run_doors_paper.bat",
+    "n_rollouts": 50,
+    "horizon": 400,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": true,
+    "keep_images": false,
+    "video_skip": 5,
+    "experiments": {
+        "door_left": {
+            "config": "calvin_exp_configs_examples/experiments/door_left_paper.json",
+            "scale": 1.5,
+            "alpha": 30,
+            "conditions": {
+                "original": "datasets/robot_poses/articulated/poses/door_left.hdf5",
+                "recombined": "datasets/robot_poses/articulated/door_left/*.hdf5"
+            },
+            "seed": 4
+        },
+        "door_right": {
+            "config": "calvin_exp_configs_examples/experiments/door_right_paper.json",
+            "scale": 2,
+            "alpha": 15,
+            "conditions": {
+                "original": "datasets/robot_poses/articulated/poses/door_right.hdf5",
+                "recombined": "datasets/robot_poses/articulated/door_right/*.hdf5"
+            },
+            "seed": 5
+        }
+    }
+}

@@ -67,10 +67,14 @@ def read_calvin_folder(folder):
         if len(missing) > 0:
             raise FileNotFoundError(f"{folder} has {len(missing)} missing frames in a recording, the first is {missing[0]}")
 
-        frames = [np.load(file) for file in files]
-        states = np.array([frame["scene_obs"] for frame in frames], dtype = np.float64)
-        proprio = np.array([frame["robot_obs"] for frame in frames], dtype = np.float64)
-        actions = np.clip(np.array([frame["rel_actions"] for frame in frames], dtype = np.float64), -1, 1) # the authors clip them too
+        states, proprio, actions = list(), list(), list()
+        for file in files: # closed one by one, a long recording has more frames than files can be open
+            with np.load(file) as frame:
+                states.append(frame["scene_obs"])
+                proprio.append(frame["robot_obs"])
+                actions.append(frame["rel_actions"])
+        states, proprio = np.array(states, dtype = np.float64), np.array(proprio, dtype = np.float64)
+        actions = np.clip(np.array(actions, dtype = np.float64), -1, 1) # the authors clip them too
 
         def load_images(camera, wanted, files = files):
             return np.stack([np.load(files[frame])[CALVIN_CAMERA_KEYS[camera]] for frame in wanted])
