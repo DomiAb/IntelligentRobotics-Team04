@@ -354,3 +354,57 @@ def test_multigoal_guidance_builds_from_conditions(dynamics_model):
     guidance.observe(obs, 20)
     t, step, score, d_goal, d_contrast = guidance.trace[0]
     assert score == d_contrast - d_goal and score < 0
+
+
+# --- the drawer check and on_avoid -------------------------------------------------------------------------------------------------------
+
+def test_block_outside_the_drawer_is_not_in_it():
+    far = robot()
+    inside = scene(drawer = 0.2, blue = (0.18, -0.285, 0.3624)) # y with the drawer pushed in is -0.085
+    assert state_matches(inside, far, {"blocks" : {"blue" : ["drawer", "released", "resting"]}})
+    for position in [(0.43, -0.317, 0.35),   # next to the drawer, low. A rollout of blue_drawer_end counted this as a success
+                     (0.18, -0.50, 0.35),    # in front of it
+                     (0.18, -0.085, 0.35)]:  # behind it, the drawer is 20 cm further out
+        assert not state_matches(scene(drawer = 0.2, blue = position), far, {"blocks" : {"blue" : "drawer"}})
+        assert not state_matches(scene(drawer = 0.2, blue = position), far, {"blocks" : {"blue" : "resting"}})
+
+
+PRESS_FIRST = [(scene(), robot()), (scene(light = 1.0), robot()), (scene(light = 1.0, drawer = 0.2), robot())]
+
+
+def test_on_avoid_end_or_record():
+    config = {"env_setup" : {"drawer" : "closed"}, "goal_sequence" : [{"name" : "open", "behaviors" : ["drawer_open"], "avoid_behaviors" : ["button_on"]}]}
+    ended = run(SequentialGoalTracker(config), PRESS_FIRST)
+    assert ended.failure == "button_on during step open" and not ended.success and ended.t == 1 # the default, as before
+    recorded = run(SequentialGoalTracker({**config, "on_avoid" : "record"}), PRESS_FIRST)
+    assert recorded.success and recorded.failure is None and recorded.violations == [(1, "button_on", "open")]
+    summary = summarize_sequence([ended.summary(), recorded.summary()], config)
+    assert summary["Num_Success"] == 1 and summary["Num_Success_Without_Violation"] == 0
+    assert summary["Violations"] == {"button_on during step open" : 2}
+    step = {**config["goal_sequence"][0], "on_avoid" : "end"} # a step overrides the config
+    assert run(SequentialGoalTracker({**config, "on_avoid" : "record", "goal_sequence" : [step]}), PRESS_FIRST).failure is not None
+
+
+def test_avoid_counts_from_the_start_of_the_step():
+    """The press that completes the button step isn't a violation of the next step, a later one is."""
+    config = {"env_setup" : {"green_light" : "off"}, "on_avoid" : "record", "goal_sequence" : [
+        {"name" : "press", "behaviors" : ["button_on"]}, {"name" : "open", "behaviors" : ["drawer_open"], "avoid_behaviors" : ["button_on", "button_off"]}]}
+    frames = [(scene(), robot()), (scene(light = 1.0), robot()), (scene(light = 1.0), robot())]
+    assert run(SequentialGoalTracker(config), frames).violations == []
+    assert run(SequentialGoalTracker(config), frames + [(scene(light = 0.0), robot())]).violations == [(3, "button_off", "open")]
+
+
+def test_on_avoid_errors():
+    step = {"behaviors" : ["drawer_open"]}
+    with pytest.raises(ValueError, match = "on_avoid"):
+        validate_multigoal_config({"env_setup" : {}, "on_avoid" : "stop", "goal_sequence" : [step]})
+    with pytest.raises(ValueError, match = "to be reached and to be avoided"):
+        validate_multigoal_config({"env_setup" : {}, "avoid_behaviors" : ["drawer_open"], "goal_sequence" : [step]})
+
+
+def test_on_avoid_of_a_single_goal():
+    config = {"target_behaviors" : ["drawer_open"], "avoid_behaviors" : ["button_on"], "env_setup" : {}}
+    tracker = run(GoalTracker(config), PRESS_FIRST)
+    assert tracker.behaviors == ["button_on"] # ended there
+    tracker = run(GoalTracker({**config, "on_avoid" : "record"}), PRESS_FIRST)
+    assert tracker.behaviors == ["button_on", "drawer_open"]

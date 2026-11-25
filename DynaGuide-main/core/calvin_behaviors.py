@@ -38,6 +38,7 @@ COMPLETED = {"door_left" : 0.26, "door_right" : 0.035,
 
 BLOCKS = {"red_displace" : 6, "blue_displace" : 12, "pink_displace" : 18} # index of the block position
 LIFTS = {"red_lift" : 6, "blue_lift" : 12, "pink_lift" : 18}
+ON_AVOID = ["end", "record"] # what a config's on_avoid can be: end the rollout when something to avoid happens, or only record it
 BLOCK_MOVED = 0.01
 BLOCK_LIFTED = 0.03 # higher than where the block was by this much, while the robot is at it. A block is 0.04 high
 BLOCK_ROBOT_NEAR = 0.1 # so we don't count a block that moves with the drawer
@@ -70,6 +71,8 @@ def validate_experiment_config(config):
     GoalTracker can't detect from the start state, like drawer_open from a drawer that is already open or half open.
     """
     targets, avoid = get_behavior_goals(config)
+    if config.get("on_avoid", "end") not in ON_AVOID:
+        raise ValueError(f"on_avoid: choose from {ON_AVOID}, got {config['on_avoid']}")
     env_setup = config["env_setup"]
     validate_env_setup(env_setup)
     if is_sanity(config):
@@ -137,10 +140,12 @@ def detect_behaviors(reference, state, proprio, lowest = None, highest = None):
 class GoalTracker:
     """
     Follows one episode. Call update() every step with the state, it returns True once the outcome is decided:
-    a target was reached or something to avoid happened. Without goals in the config it never returns True.
+    a target was reached or something to avoid happened. With "on_avoid" : "record" in the config, something to avoid doesn't end it, but the
+    episode still counts as failed. Without goals in the config it never returns True.
     """
     def __init__(self, config):
         self.targets, self.avoid = get_behavior_goals(config)
+        self.end_on_avoid = config.get("on_avoid", "end") == "end"
         self.start_state = None
         self.achieved = list()
 
@@ -150,7 +155,7 @@ class GoalTracker:
         for name in self.detect(state, proprio):
             if name not in self.achieved:
                 self.achieved.append(name)
-        return any(name in self.targets or name in self.avoid for name in self.achieved)
+        return any(name in self.targets or (self.end_on_avoid and name in self.avoid) for name in self.achieved)
 
     def detect(self, state, proprio):
         return detect_behaviors(self.start_state, state, proprio)

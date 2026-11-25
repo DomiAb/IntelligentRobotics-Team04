@@ -39,7 +39,7 @@ The task file:
     "block"        the block the task works with, like "blue". Needed for block steps; the block poses are recolored to it
     "max"          at most this many conditions per step (optional, spread over the poses). The guidance sums over the conditions, so
                    steps with very different counts pull differently hard
-    "avoid_behaviors", "switch"   copied into the experiment config
+    "avoid_behaviors", "on_avoid", "switch"   copied into the experiment config
     "steps"        the goal steps in order, each with
         "name"
         "poses"          the base set: "articulated/drawer_open", "blocks/grip_table/grip_right", "blocks/release_drawer", ...
@@ -66,7 +66,7 @@ would be inside something, or a drawer pose's drawer is more than 2 cm off the s
 
 POSES_ROOT = os.path.join("datasets", "robot_poses")
 OUTPUT_ROOT = os.path.join("datasets", "guidance_conditions")
-TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_behaviors", "switch", "steps"}
+TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_behaviors", "on_avoid", "switch", "steps"}
 STEP_EXTRA_KEYS = {"poses", "near", "max", "block_after", "contrast_poses"}
 GOAL_KEYS = {"behaviors", "where", "any_behaviors"}
 MAX_DRAWER_SHIFT = 0.02
@@ -273,7 +273,7 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
     os.makedirs(output, exist_ok = True)
 
     config = {"description" : task.get("description", ""), "env_setup" : task["env_setup"]}
-    for key in ["reset_poses", "avoid_behaviors", "switch"]:
+    for key in ["reset_poses", "avoid_behaviors", "on_avoid", "switch"]:
         if key in task:
             config[key] = task[key]
     config["goal_sequence"] = list()

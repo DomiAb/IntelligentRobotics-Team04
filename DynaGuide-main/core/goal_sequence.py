@@ -3,7 +3,7 @@ import numpy as np
 from collections import Counter
 from dataclasses import dataclass, field
 
-from core.calvin_behaviors import ARTICULATED, BEHAVIORS, detect_behaviors, episode_states
+from core.calvin_behaviors import ARTICULATED, BEHAVIORS, ON_AVOID, detect_behaviors, episode_states
 from core.calvin_utils import BLOCK_INDEX, articulated_value, validate_env_setup
 from core.guidance_conditions import StateView, find_frames, state_matches
 
@@ -15,7 +15,8 @@ guides towards one goal step after the other and decides by itself when to move 
     {
         "env_setup" : {"drawer" : "closed", "blocks" : {"blue" : "table_center"}},
         "reset_poses" : "calvin_exp_configs_examples/reset_poses/....json",
-        "avoid_behaviors" : ["door_left"],            optional, ends the episode as failed in any step
+        "avoid_behaviors" : ["door_left"],            optional, must not happen in any step
+        "on_avoid" : "end",                           optional, what happens when one does, see below
         "switch" : {"mode" : "latent", ...},          optional, how DynaGuide moves on, see core/multigoal_guidance.py
         "goal_sequence" : [
             {"name" : "open_drawer",
@@ -39,8 +40,15 @@ What a step can ask for, everything it lists must be true at once for it to comp
   For blocks: drawer, table, table_left/center/right, cabinet, cabinet_left/right, held, lifted, released, resting, lists of these,
   {"near" : [x, y, z] or color, "radius" : r} and {"on" : color}
 - blocks_moved: {"blue" : 0.05}, the block is at least this far (m) from where it was at the start of the step
-- avoid_behaviors: fails the episode if one happens during this step
+- avoid_behaviors: must not happen during this step, in addition to those of the config. Counted from the start of the step, like behaviors
+- on_avoid: what happens when a behavior to avoid happens, for this step only (otherwise as in the config)
+    "end" (default)   the rollout ends there and the episode failed
+    "record"          the rollout goes on and the episode can still succeed. It is counted in Violations of the results, and
+                      Num_Success_Without_Violation counts the successes where nothing to avoid happened
 - max_steps: fails the episode if the step takes longer than this many env steps
+
+A rollout ends when: all steps are done, something to avoid happened with on_avoid "end", a step took longer than its max_steps, or the
+horizon of the run is over. A behavior that isn't listed to avoid never ends it.
 
 A step needs at least one of behaviors, any_behaviors, where, blocks_moved. Later steps don't undo earlier ones: a drawer that is
 opened in step 1 and closed in step 3 is a success. Steps complete strictly in order, a step can't be done before the one before it.
@@ -50,7 +58,7 @@ pos_examples, neg_examples, scale, alpha and switch of a step are for DynaGuide 
 """
 
 STEP_GOAL_KEYS = ["behaviors", "any_behaviors", "where", "blocks_moved"]
-STEP_KEYS = ["name", "description", "avoid_behaviors", "max_steps", "pos_examples", "neg_examples", "use_neg", "scale", "alpha", "switch"] + STEP_GOAL_KEYS
+STEP_KEYS = ["name", "description", "avoid_behaviors", "on_avoid", "max_steps", "pos_examples", "neg_examples", "use_neg", "scale", "alpha", "switch"] + STEP_GOAL_KEYS
 EVENT_BEHAVIORS = [name for name in BEHAVIORS if name != "no_behavior"]
 JOINTS = ["sliding_door", "drawer", "switch", "green_light"] # in the order of ARTICULATED
 
@@ -68,7 +76,14 @@ class GoalStep:
     blocks_moved: dict = field(default_factory = dict)
     avoid_behaviors: list = field(default_factory = list)
     max_steps: int = None
+    on_avoid: str = "end"
     raw: dict = field(default_factory = dict) # the whole entry of the config, with the guidance settings
+
+
+def avoid_mode(value, label):
+    if value not in ON_AVOID:
+        raise ValueError(f"{label} on_avoid: choose from {ON_AVOID}, got {value}")
+    return value
 
 
 def parse_goal_sequence(config):
@@ -78,6 +93,7 @@ def parse_goal_sequence(config):
         raise ValueError("goal_sequence must be a list with at least one goal step")
     if "target_behaviors" in config:
         raise ValueError("A config with goal_sequence can't have target_behaviors, put the goals into the steps")
+    default_on_avoid = avoid_mode(config.get("on_avoid", "end"), "config")
     steps = list()
     for number, entry in enumerate(sequence):
         label = f"goal_sequence step {number}"
@@ -103,13 +119,18 @@ def parse_goal_sequence(config):
         if max_steps is not None and (not isinstance(max_steps, int) or max_steps <= 0):
             raise ValueError(f"{label} ({name}) max_steps: expected a positive integer, got {max_steps}")
         steps.append(GoalStep(name, list(entry.get("behaviors", [])), list(entry.get("any_behaviors", [])), dict(where), dict(moved),
-                              list(entry.get("avoid_behaviors", [])), max_steps, dict(entry)))
+                              list(entry.get("avoid_behaviors", [])), max_steps,
+                              avoid_mode(entry.get("on_avoid", default_on_avoid), f"{label} ({name})"), dict(entry)))
     names = [step.name for step in steps]
     if len(set(names)) != len(names):
         raise ValueError(f"Two goal steps have the same name: {names}")
     avoid = config.get("avoid_behaviors", [])
     if any(item not in EVENT_BEHAVIORS for item in avoid):
         raise ValueError(f"avoid_behaviors: expected a list of {EVENT_BEHAVIORS}, got {avoid}")
+    for step in steps:
+        both = sorted((set(step.behaviors) | set(step.any_behaviors)) & (set(step.avoid_behaviors) | set(avoid)))
+        if len(both) > 0:
+            raise ValueError(f"goal step {step.name}: {both} is to be reached and to be avoided. Put avoid_behaviors into the steps where they apply")
     return steps
 
 
@@ -168,6 +189,7 @@ class SequentialGoalTracker:
         self.seen = set() # behaviors of the current step
         self.results = list()
         self.achieved = list() # every behavior of the episode, in order and each once, for the Behavior_Counts
+        self.violations = list() # (env step, behavior, goal step) to avoid that happened
         self.failure = None
 
     @property
@@ -213,14 +235,17 @@ class SequentialGoalTracker:
             step = self.steps[self.current]
             self.lowest, self.highest = np.minimum(self.lowest, state), np.maximum(self.highest, state)
             for name in detect_behaviors(self.reference[0], state, proprio, self.lowest, self.highest):
-                if name not in self.seen:
+                first = name not in self.seen
+                if first:
                     self.seen.add(name)
                     self.results[-1].events.append((self.t, name))
                 if name not in self.achieved:
                     self.achieved.append(name)
-                if name in self.global_avoid or name in step.avoid_behaviors:
-                    self.failure = f"{name} during step {step.name}"
-                    return True
+                if first and (name in self.global_avoid or name in step.avoid_behaviors):
+                    self.violations.append((self.t, name, step.name))
+                    if step.on_avoid == "end":
+                        self.failure = f"{name} during step {step.name}"
+                        return True
             if step.max_steps is not None and self.t - self.results[-1].started_at > step.max_steps:
                 self.failure = f"step {step.name} took more than {step.max_steps} steps"
                 return True
@@ -238,7 +263,7 @@ class SequentialGoalTracker:
     def summary(self):
         """What run_dynaguide.py writes about this episode."""
         return {"success" : self.success, "steps_completed" : self.steps_completed, "failure" : self.failure, "env_steps" : self.t,
-                "behaviors" : self.behaviors,
+                "behaviors" : self.behaviors, "violations" : [list(violation) for violation in self.violations],
                 "steps" : [{"name" : result.name, "started_at" : result.started_at, "completed_at" : result.completed_at,
                             "events" : [[t, name] for t, name in result.events]} for result in self.results]}
 
@@ -258,6 +283,8 @@ def summarize_sequence(episodes, config, switch_logs = None):
         "Goal_Sequence" : [step.name for step in steps],
         "Success_Rate" : float(np.mean(successes)) if n > 0 else None,
         "Num_Success" : int(np.sum(successes)),
+        "Num_Success_Without_Violation" : sum(episode["success"] and len(episode.get("violations", [])) == 0 for episode in episodes),
+        "Violations" : dict(Counter(f"{name} during step {step}" for episode in episodes for _, name, step in episode.get("violations", []))),
         "Mean_Steps_Completed" : float(np.mean(completed)) if n > 0 else None,
         "Step_Reach_Rate" : {step.name : float(np.mean([c > k for c in completed])) if n > 0 else None for k, step in enumerate(steps)},
         "Failures" : dict(Counter(episode["failure"] for episode in episodes if episode["failure"] is not None)),

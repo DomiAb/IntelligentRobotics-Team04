@@ -234,6 +234,9 @@ JOINT_WORD_RANGES["button"] = {"released" : (-math.inf, 0.002), "pressed" : (0.0
 
 BLOCK_POSITION = {"red" : 6, "blue" : 12, "pink" : 18}
 BLOCK_REST_Z = (0.362, 0.46) # resting in the drawer, or on the table and in the cabinet
+# where the center of a block can be in the drawer: x, and y with the drawer pushed back in. Resting blocks of the D split are at x 0.064
+# to 0.312 and y -0.123 to 0.009. Lower than BLOCK_IN_DRAWER_Z is below the table top
+BLOCK_IN_DRAWER_X, BLOCK_IN_DRAWER_Y, BLOCK_IN_DRAWER_Z = (0.04, 0.34), (-0.15, 0.04), 0.40
 HELD_DISTANCE, HELD_WIDTH, OPEN_WIDTH = 0.04, 0.06, 0.07 # the gripper is 0.08 wide when open and around 0.04 on a block
 HELD_MIN_WIDTH = 0.03 # narrower means the gripper closed on nothing, e.g. next to a block it pushes
 CABINET_MIDDLE_X, CABINET_FRONT_Y = -0.06, 0.03
@@ -277,8 +280,11 @@ def _block_word_mask(color, word, recording):
     near_tcp = np.linalg.norm(recording.proprio[:, :3] - position, axis = 1) < HELD_DISTANCE
     width = recording.proprio[:, GRIPPER_WIDTH]
     held = near_tcp & (width > HELD_MIN_WIDTH) & (width < HELD_WIDTH) & (recording.proprio[:, GRIPPER_ACTION] < 0)
-    on_drawer_floor = np.abs(z - BLOCK_REST_Z[0]) < 0.015
-    masks = {"drawer" : z < 0.40,
+    y_in_drawer = y + recording.states[:, JOINT_INDEX["drawer"]] # the drawer opens towards -y
+    in_drawer = (z < BLOCK_IN_DRAWER_Z) & (x > BLOCK_IN_DRAWER_X[0]) & (x < BLOCK_IN_DRAWER_X[1]) \
+              & (y_in_drawer > BLOCK_IN_DRAWER_Y[0]) & (y_in_drawer < BLOCK_IN_DRAWER_Y[1])
+    on_drawer_floor = in_drawer & (np.abs(z - BLOCK_REST_Z[0]) < 0.015)
+    masks = {"drawer" : in_drawer,
              "table" : on_table,
              "table_left" : on_table & (x < TABLE_THIRDS[0]),
              "table_center" : on_table & (x >= TABLE_THIRDS[0]) & (x < TABLE_THIRDS[1]),
