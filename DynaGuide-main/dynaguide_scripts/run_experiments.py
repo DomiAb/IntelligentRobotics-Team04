@@ -99,13 +99,13 @@ def make_tasks(plan):
 
 
 def condition_specs(config):
-    """Every pos_examples / neg_examples / contrast_examples / before_examples of a config, also those of the goal steps of a goal_sequence."""
+    """Every pos_examples / neg_examples / contrast_examples / before_examples / goal_examples of a config, also those of the goal steps of a goal_sequence."""
     if not is_multigoal(config):
         return [config["pos_examples"]]
     specs = list()
     for entry in config["goal_sequence"]:
         specs += [entry[key] for key in ["pos_examples", "neg_examples"] if entry.get(key) is not None]
-        specs += [entry["switch"][key] for key in ["contrast_examples", "before_examples"] if entry.get("switch", {}).get(key) is not None]
+        specs += [entry["switch"][key] for key in ["contrast_examples", "before_examples", "goal_examples"] if entry.get("switch", {}).get(key) is not None]
     return specs
 
 

@@ -1,5 +1,6 @@
 import argparse
 import copy
+import itertools
 import json
 import os
 import random
@@ -10,11 +11,11 @@ import numpy as np
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
 
-from core.calvin_utils import BLOCK_INDEX, STATE_WORDS, generate_reset_state, parse_block
+from core.calvin_utils import BLOCK_INDEX, PLACES, STATE_WORDS, generate_reset_state, parse_block
 from core.goal_sequence import STEP_KEYS, validate_multigoal_config
-from core.guidance_conditions import save_preview
+from core.guidance_conditions import TABLE_THIRDS, save_preview
 from recombine_conditions import DEFAULT_ENV_CONFIG, GOALS, STATE_INDEX, Simulator, joint_word, make_env
-from scene_tools import (AREA_SPOT, JOINTS, block_area, held_joint_moved, move_block, new_contacts, put_block_at_place, read_condition_poses,
+from scene_tools import (AREA_SPOT, JOINTS, block_area, held_joint_moved, hide_block, move_block, new_contacts, put_block_at_place, read_condition_poses,
                          save_rows, scene_name, write_rendered)
 
 """
@@ -25,7 +26,11 @@ Makes a task: the guidance conditions of every goal step and the experiment conf
 Run it from DynaGuide-main. The output goes to datasets/guidance_conditions/<name of the task file>:
     <step>.hdf5 (.png)           the conditions of each step, <step>_contrast.hdf5 for a step with contrast_poses
     <step>_before.hdf5 (.png)    for a step that changes a joint: each condition once more, with the same robot but the joint still as it
-                                 was before the step. The switch compares the two, see the change criterion in core/multigoal_guidance.py
+                                 was before the step. The switch compares the two, see core/multigoal_guidance.py
+    <step>_switch.hdf5 (.png)    for a release step into the drawer or onto the table: the block at a grid of places all over the area
+                                 (GRID_SPACING), <step>_before.hdf5 is the same without the block. Only the switch uses these, the
+                                 guidance doesn't. Its conditions are too few places: a block 4 cm from all of them looks like none.
+                                 Other release steps: the conditions themselves and the same without the block
     <task>_all.png               the first conditions of every step, labeled with what the scene shows at that step
     experiment.json              the experiment config for run_dynaguide.py / run_experiments.py, its pos_examples point to the files above
     manifest.json                the scene of every step, every condition with the pose it came from, every skipped pose and why
@@ -72,6 +77,9 @@ TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_b
 STEP_EXTRA_KEYS = {"poses", "near", "max", "block_after", "contrast_poses"}
 GOAL_KEYS = {"behaviors", "where", "any_behaviors"}
 MAX_DRAWER_SHIFT = 0.02
+GRID_SPACING = 0.03 # meters between the places of <step>_switch.hdf5
+MIN_VISIBLE = 0.5 # a place where the image shows less than this part of the block (compared with the median place) is left out
+DRAWER_GRID = ((0.04, 0.32), (-0.13, 0.02)) # x, and y with the drawer pushed back in: where blocks rest on the drawer floor
 BUTTON_INDEX = 2 # the button joint in the scene state, the green light (STATE_INDEX) is what it toggles
 HELD = "held"
 BASE_COLOR = "blue"
@@ -224,16 +232,64 @@ def before_state(story, pose_set, state, block):
 
 def render_before(sim, story, pose_set, rendered, block):
     """
-    The twin of every condition of an articulated step, see before_state. The robot may be inside something here, like the gripper in
+    The twin of every condition of an articulated step, see before_state, or of a release step, the block gone. The robot may be inside something here, like the gripper in
     the closed drawer. That doesn't matter: the image is only compared with its condition, to see what the step changes.
     """
     twins = list()
     for _, state, pose in rendered:
-        before = before_state(story, pose_set, state, block)
+        if pose_set.kind == "articulated":
+            before = before_state(story, pose_set, state, block)
+        else:
+            before = state.copy()
+            hide_block(before, block)
         sim.set(before, pose["proprio"])
         before[4] = float(before[STATE_INDEX["switch"]] > sim.switch_threshold) # the lightbulb follows the switch
         twins.append((sim.render(), before, pose))
     return twins
+
+
+def place_grid(pose_set, drawer):
+    """(x, y) places all over the area of a release step, None for an area without a grid (the cabinet). drawer: how far it is open."""
+    if pose_set.place == "drawer":
+        (x_low, x_high), (y_low, y_high) = DRAWER_GRID
+        y_low, y_high = y_low - drawer, y_high - drawer
+    elif pose_set.place == "table":
+        low, high, _ = PLACES["table"]
+        third = {"left" : 0, "center" : 1, "right" : 2}.get(pose_set.area.split("/")[-1])
+        edges = [low[0], *TABLE_THIRDS, high[0]]
+        x_low, x_high = (low[0], high[0]) if third is None else (edges[third], edges[third + 1])
+        y_low, y_high = low[1], high[1]
+    else:
+        return None
+    axis = lambda start, end: np.arange(start, end + 1e-6, GRID_SPACING)
+    return list(itertools.product(axis(x_low, x_high), axis(y_low, y_high)))
+
+
+def render_grid(sim, pose_set, rendered, block):
+    """
+    The images the switch of a release step compares: (with the block, without it), the block at each place of the grid, the robot of
+    one of the conditions, far from the place so it hides little (one of the four farthest). None for an area without a grid.
+    A place where the block is hidden (by the table or the arm) is left out: such a pair has no change to compare.
+    """
+    places = place_grid(pose_set, float(rendered[0][1][STATE_INDEX["drawer"]]))
+    if places is None:
+        return None
+    height, index = float(np.median([state[BLOCK_INDEX[block] + 2] for _, state, _ in rendered])), BLOCK_INDEX[block]
+    goals, befores = list(), list()
+    for number, (x, y) in enumerate(places):
+        farthest = sorted(range(len(rendered)), key = lambda k: -np.hypot(rendered[k][2]["proprio"][0] - x, rendered[k][2]["proprio"][1] - y))[:4]
+        _, state, pose = rendered[farthest[number % len(farthest)]]
+        goal = state.copy()
+        goal[index : index + 3] = [x, y, height]
+        before = goal.copy()
+        hide_block(before, block)
+        for images, scene in [(goals, goal), (befores, before)]:
+            sim.set(scene, pose["proprio"])
+            images.append((sim.render(), scene, pose))
+    changed = lambda a, b: int((np.abs(a["third_person"].astype(int) - b["third_person"].astype(int)).max(axis = 2) > 20).sum())
+    pixels = np.array([changed(goal[0], before[0]) for goal, before in zip(goals, befores)])
+    visible = np.flatnonzero(pixels >= MIN_VISIBLE * np.median(pixels))
+    return [goals[k] for k in visible], [befores[k] for k in visible]
 
 
 def check_story(story, rendered, pose_set, block, reset):
@@ -348,13 +404,25 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
         save_preview(condition_file[:-5] + ".png", segments)
         rows.append((f"{name} | {scene}", [images["third_person"] for images, _, _ in rendered]))
         step["pos_examples"] = condition_file
-        if pose_set.kind == "articulated": # a block step changes nothing that stays in place, its switch is the older one
-            twins = render_before(sim, story, pose_set, rendered, block)
+        if pose_set.kind == "articulated" or pose_set.action == "release": # a grip changes nothing that stays in place, its switch is the older one
+            grid = render_grid(sim, pose_set, rendered, block) if pose_set.kind == "blocks" else None
+            if grid is None:
+                twins, twin_attributes = render_before(sim, story, pose_set, rendered, block), attributes
+            else:
+                goals, twins = grid
+                twin_attributes = [{"pose_file" : pose["file"]} for _, _, pose in goals]
+                switch_file = os.path.join(output, f"{name}_switch.hdf5")
+                segments = write_rendered(switch_file, goals, f"{name}_switch", twin_attributes)
+                save_preview(switch_file[:-5] + ".png", segments)
+                rows.append((f"{name} switch, {len(goals)} places | {scene}", [images["third_person"] for images, _, _ in goals]))
+                step["switch"] = {**step.get("switch", dict()), "goal_examples" : switch_file}
             before_file = os.path.join(output, f"{name}_before.hdf5")
-            segments = write_rendered(before_file, twins, f"{name}_before", attributes)
+            segments = write_rendered(before_file, twins, f"{name}_before", twin_attributes)
             save_preview(before_file[:-5] + ".png", segments)
             rows.append((f"{name} before | {scene}", [images["third_person"] for images, _, _ in twins]))
             step["switch"] = {**step.get("switch", dict()), "before_examples" : before_file}
+            if pose_set.kind == "blocks": # the block can lie anywhere in the area, only the patches criterion can deal with that
+                step["switch"].setdefault("default_criterion", "patches")
         config["goal_sequence"].append(step)
         advance(story, pose_set, rendered, entry)
 

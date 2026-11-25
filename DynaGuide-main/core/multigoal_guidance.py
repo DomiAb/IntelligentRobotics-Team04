@@ -21,6 +21,12 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
                     Done when the score is above margin and stopped rising, i.e. no new maximum (by more than tolerance) for patience
                     checks: so not halfway while the drawer is still moving. A step whose goal already holds at its start is done at once.
                     make_task.py renders the before_examples of every step that changes a joint
+                    "patches" (needs before_examples too): the same score, but only on the patches the step changes, those that differ
+                    between a goal condition and its before_example by more than changed (0.3) times the strongest one. The best
+                    fitting pair counts, not the average: for a block that is let go, one condition with the right place is enough.
+                    Done as with change, with the margin 0.5. For a release step make_task.py writes goal_examples (the block at a grid
+                    of places) and before_examples (the same without the block) for the switch alone, the guidance keeps its own
+                    conditions, and default_criterion patches: what the step uses when no criterion is given
                     "peak" (default for a step without before_examples): the older switch, on the whole image. Uses the contrast score
                     c = d_contrast - d_goal: how much more the current image looks like the goal conditions than like the contrast
                     conditions (contrast_examples of the step, by default the goal conditions of the step before). Done when c has risen
@@ -32,12 +38,13 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
                     "relative": d_goal < ratio * spread of the goal conditions, where the spread is the median distance of a condition
                               to its nearest other one. Needs no contrast, but robot pose and blocks count in full
                     "threshold": d_goal < threshold, in the units of the embedding (L2 of the flattened patches)
-                    A step without before_examples uses "peak" instead of "change", without contrast conditions either (the first step)
+                    A step without before_examples uses "peak" instead of "change" and "patches", without contrast conditions either (the first step)
                     "relative" instead of "peak" and "contrast"
-    margin, tolerance, patience     see the criteria. Defaults for change: 0.2, 0.05 and 10, for the others: 30, 5 and 5 (margin and
-                    tolerance in the units of the embedding)
+    margin, tolerance, patience     see the criteria. Defaults for change: 0.2, 0.05 and 10, for patches: 0.5, 0.05 and 10, for the
+                    others: 30, 5 and 5 (margin and tolerance in the units of the embedding)
+    changed         for patches: how strongly a patch must change to count, as a part of the strongest one (default 0.3)
     ratio, threshold    the numbers of relative and threshold
-    embedding       what is compared, "observed" (default) or "predicted" (not for change)
+    embedding       what is compared, "observed" (default) or "predicted" (not for change and patches)
                     observed: the DINO patches of the current camera image against those of the last frames of the step's conditions.
                               Both are encoder outputs of real images, no prediction error, and they don't depend on the action
                     predicted: the dynamics model's prediction for the current image with the last action held, against the
@@ -54,11 +61,14 @@ The numbers behind the defaults are in the notebook.
 """
 
 SWITCH_DEFAULTS = {"mode" : "latent", "embedding" : "observed", "criterion" : "peak", "margin" : 30.0, "tolerance" : 5.0, "ratio" : 1.0,
-                   "threshold" : None, "patience" : 5, "min_steps" : 10, "check_every" : 1, "replan_on_switch" : True}
+                   "threshold" : None, "patience" : 5, "min_steps" : 10, "check_every" : 1, "replan_on_switch" : True, "changed" : 0.3}
 CHANGE_DEFAULTS = {"criterion" : "change", "margin" : 0.2, "tolerance" : 0.05, "patience" : 10} # what differs for the change criterion
-CRITERION_NUMBERS = ["margin", "tolerance", "patience"] # mean something else for change than for the others
-SWITCH_KEYS = list(SWITCH_DEFAULTS) + ["contrast_examples", "before_examples"]
-CRITERIA = ["change", "peak", "contrast", "relative", "threshold"]
+PATCHES_DEFAULTS = {"criterion" : "patches", "margin" : 0.5, "tolerance" : 0.05, "patience" : 10} # the same for the patches criterion
+PAIR_DEFAULTS = {"change" : CHANGE_DEFAULTS, "patches" : PATCHES_DEFAULTS} # the criteria that compare with the before_examples
+CRITERION_NUMBERS = ["margin", "tolerance", "patience"] # mean something else for these than for the others
+PATCH_DIM = 384 # numbers per DINO patch, the embeddings are the patches one after the other
+SWITCH_KEYS = list(SWITCH_DEFAULTS) + ["contrast_examples", "before_examples", "goal_examples", "default_criterion"]
+CRITERIA = ["change", "patches", "peak", "contrast", "relative", "threshold"]
 
 
 def switch_settings(config, step_entry):
@@ -71,25 +81,27 @@ def switch_settings(config, step_entry):
             raise ValueError(f"Unknown switch settings {unknown}, choose from {SWITCH_KEYS}")
         given.update(source)
     has_before = given.get("before_examples") is not None
-    criterion = given.get("criterion", "change" if has_before and given.get("embedding", "observed") == "observed" else "peak")
+    criterion = given.get("criterion", given.get("default_criterion", "change") if has_before and given.get("embedding", "observed") == "observed" else "peak")
     if criterion not in CRITERIA:
         raise ValueError(f"switch criterion must be one of {CRITERIA}, got {criterion}")
-    if criterion == "change" and not has_before:
+    if criterion in PAIR_DEFAULTS and not has_before:
         if "criterion" in sources[1]:
-            raise ValueError("switch criterion change needs before_examples")
-        given = {key : value for key, value in given.items() if key not in CRITERION_NUMBERS or key in sources[1]} # the config's are for change
+            raise ValueError(f"switch criterion {criterion} needs before_examples")
+        given = {key : value for key, value in given.items() if key not in CRITERION_NUMBERS or key in sources[1]} # the config's are for the pairs
         criterion = "peak"
-    settings = {**SWITCH_DEFAULTS, **(CHANGE_DEFAULTS if criterion == "change" else {}), **given, "criterion" : criterion}
+    settings = {**SWITCH_DEFAULTS, **PAIR_DEFAULTS.get(criterion, {}), **given, "criterion" : criterion}
     if settings["mode"] not in ["latent", "oracle"]:
         raise ValueError(f"switch mode must be latent or oracle, got {settings['mode']}")
     if settings["embedding"] not in ["observed", "predicted"]:
         raise ValueError(f"switch embedding must be observed or predicted, got {settings['embedding']}")
     if criterion == "threshold" and settings["threshold"] is None:
         raise ValueError("switch criterion threshold needs a threshold")
-    if criterion == "change" and settings["embedding"] != "observed":
-        raise ValueError("switch criterion change needs the observed embedding")
-    if criterion == "change" and not -1 < settings["margin"] < 1:
-        raise ValueError(f"the score of the change criterion goes from -1 (before) to 1 (done), a margin of {settings['margin']} makes no sense")
+    if criterion in PAIR_DEFAULTS and settings["embedding"] != "observed":
+        raise ValueError(f"switch criterion {criterion} needs the observed embedding")
+    if not 0 <= settings["changed"] < 1:
+        raise ValueError(f"changed is a part of the strongest patch, 0 to 1, got {settings['changed']}")
+    if criterion in PAIR_DEFAULTS and not -1 < settings["margin"] < 1:
+        raise ValueError(f"the score of the {criterion} criterion goes from -1 (before) to 1 (done), a margin of {settings['margin']} makes no sense")
     return settings
 
 # --- embeddings -------------------------------------------------------------------------------------------------------------------------
@@ -161,6 +173,29 @@ def change_score(goal, before, query):
     return along.sum(dim = 1) / (direction * direction).sum()
 
 
+def patches_score(goal, before, query, changed = 0.3):
+    """
+    Like change_score, but only on the patches that change, and the best fitting pair counts: -1 as before, +1 as in the goal condition.
+    - goal, before: embeddings [K, D], goal[k] and before[k] show the same scene and robot, apart from the change of the step
+    - query: embeddings [Q, D]
+    - changed: a patch of a pair counts if it differs by more than this part of the pair's strongest one
+    """
+    goal, before = goal.reshape(len(goal), -1, PATCH_DIM), before.reshape(len(before), -1, PATCH_DIM) # [K, patches, numbers]
+    difference = (goal - before).norm(dim = 2)
+    counts = (difference > changed * difference.max(dim = 1, keepdim = True).values).to(goal.dtype) # [K, patches]
+    size = ((difference ** 2) * counts).sum(dim = 1)
+    scores = list()
+    for q in query.reshape(len(query), -1, PATCH_DIM):
+        to_goal, to_before = [(((q - images) ** 2).sum(dim = 2) * counts).sum(dim = 1) for images in [goal, before]] # [K]
+        score = (to_before - to_goal) / size
+        scores.append(torch.where(size > 0, score, torch.full_like(score, -1.0)).max()) # a pair without a change says nothing
+    return torch.stack(scores)
+
+
+PAIR_SCORES = {"change" : lambda goal, before, query, settings : change_score(goal, before, query),
+               "patches" : lambda goal, before, query, settings : patches_score(goal, before, query, settings["changed"])}
+
+
 def observation_state(obs, main_camera, proprio_key = "proprio"):
     """The model's input for an observation of the env: the last frame of the frame stack, image as CHW 0-255."""
     image, proprio = np.asarray(obs[main_camera]), np.asarray(obs[proprio_key])
@@ -195,7 +230,7 @@ class SwitchCriterion:
 
     def reset(self):
         self.streak = 0 # checks in a row that look done (contrast, relative, threshold)
-        self.best = -float("inf") # highest score of the step so far (change, peak)
+        self.best = -float("inf") # highest score of the step so far (change, patches, peak)
         self.since_best = 0
         self.crossed = False # the contrast score was <= 0 during the step
 
@@ -213,7 +248,7 @@ class SwitchCriterion:
 
     def update_score(self, score):
         """One check. Returns True when the step is done."""
-        if self.criterion == "change":
+        if self.criterion in PAIR_DEFAULTS:
             if score <= 0 or score > self.best + self.settings["tolerance"]: # not there yet, or still rising
                 self.best, self.since_best = score, 0
             else:
@@ -250,7 +285,7 @@ class GoalStepGuidance:
         self.criterion = None
         if switch["mode"] == "latent" and goal_embeddings is not None:
             criterion = switch["criterion"]
-            if criterion == "change" and len(before_embeddings) != len(goal_embeddings):
+            if criterion in PAIR_DEFAULTS and len(before_embeddings) != len(goal_embeddings):
                 raise ValueError(f"Goal step {name}: {len(goal_embeddings)} goal conditions but {len(before_embeddings)} before_examples, "
                                  "each goal condition needs its own")
             if criterion in ["peak", "contrast"] and contrast_embeddings is None:
@@ -267,8 +302,8 @@ class GoalStepGuidance:
     def check(self, query):
         """One check of the switch for one query embedding [1, D]. Returns (done, score, d_goal, d_contrast)."""
         d_goal, d_contrast = self.distances(query)
-        if self.criterion.criterion == "change":
-            score = float(change_score(self.goal_embeddings, self.before_embeddings, query)[0])
+        if self.criterion.criterion in PAIR_DEFAULTS:
+            score = float(PAIR_SCORES[self.criterion.criterion](self.goal_embeddings, self.before_embeddings, query, self.switch)[0])
         else:
             score = self.criterion.score(d_goal, d_contrast)
         return self.criterion.update_score(score), score, d_goal, d_contrast
@@ -290,8 +325,8 @@ class MultiGoalGuidance:
     @classmethod
     def build(cls, model, step_inputs, main_camera, device, max_examples = None, action_chunk_length = 16):
         """
-        - step_inputs: per step a dict with name, good_dataset, bad_dataset, contrast_dataset and before_dataset (or None), scale, alpha,
-          switch (settings)
+        - step_inputs: per step a dict with name, good_dataset, bad_dataset, contrast_dataset, before_dataset and goal_dataset (or None),
+          scale, alpha, switch (settings). goal_dataset: the images the switch takes instead of the conditions, see goal_examples
         The contrast conditions default to the goal conditions of the step before.
         """
         steps = list()
@@ -304,8 +339,11 @@ class MultiGoalGuidance:
             goal, contrast, before = None, None, None
             if switch["mode"] == "latent" and number < len(step_inputs) - 1: # the last step is ended by the env
                 goal = cls._switch_embeddings(model, inputs["good_dataset"], switch["embedding"], device, max_examples)
-                if switch["criterion"] == "change":
-                    check_pairs(inputs["name"], inputs["good_dataset"], inputs["before_dataset"])
+                if switch["criterion"] in PAIR_DEFAULTS:
+                    own = inputs.get("goal_dataset")
+                    if own is not None:
+                        goal = cls._switch_embeddings(model, own, switch["embedding"], device, max_examples)
+                    check_pairs(inputs["name"], inputs["good_dataset"] if own is None else own, inputs["before_dataset"])
                     before = cls._switch_embeddings(model, inputs["before_dataset"], switch["embedding"], device, max_examples)
                 elif inputs.get("contrast_dataset") is not None:
                     contrast = cls._switch_embeddings(model, inputs["contrast_dataset"], switch["embedding"], device, max_examples)

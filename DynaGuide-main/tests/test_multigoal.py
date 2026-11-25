@@ -21,8 +21,8 @@ from core.calvin_behaviors import GoalTracker, detect_behaviors
 from core.goal_sequence import (SequentialGoalTracker, parse_goal_sequence, replay_sequence, summarize_sequence,
                                 validate_multigoal_config)
 from core.guidance_conditions import StateView, find_frames, read_recordings, state_matches
-from core.multigoal_guidance import (CHANGE_DEFAULTS, GoalStepGuidance, MultiGoalGuidance, SWITCH_DEFAULTS, SwitchCriterion, change_score,
-                                     check_pairs, switch_settings)
+from core.multigoal_guidance import (CHANGE_DEFAULTS, GoalStepGuidance, MultiGoalGuidance, PATCH_DIM, PATCHES_DEFAULTS, SWITCH_DEFAULTS,
+                                     SwitchCriterion, change_score, check_pairs, patches_score, switch_settings)
 
 VALIDATION = "datasets/calvin_debug_dataset/validation"
 
@@ -356,6 +356,56 @@ def test_change_switch_moves_on():
     assert guidance.log()["trace"][0][2] == pytest.approx(-1.02, abs = 0.01)
     with pytest.raises(ValueError, match = "its own"):
         GoalStepGuidance("open", None, None, None, 1.0, switch, values(100, 102), None, values(0))
+
+
+def test_patches_score():
+    """Only the patches that change count, and the best fitting pair decides."""
+    torch.manual_seed(0)
+    def images(places, value, arm): # one image per place: 8 patches, the block at patch place, the arm everywhere else in patch 0
+        x = torch.zeros(len(places), 8, PATCH_DIM)
+        x[:, 0] = arm
+        for image, place in zip(x, places):
+            image[place] = value
+        return x.flatten(start_dim = 1)
+    places = [2, 3, 5] # three goal conditions, the block at three places
+    goal, before = images(places, 4.0, 1.0), images(places, 0.0, 1.0)
+    score = lambda query: patches_score(goal, before, query).numpy()
+    assert np.allclose(score(goal), 1, atol = 1e-4) # one fitting place is enough, the other two places don't pull the score down
+    assert np.allclose(score(images([7], 4.0, 1.0)), -1, atol = 1e-4) # a block where no condition has one
+    assert np.allclose(score(images([2], 4.0, 50.0)), 1, atol = 1e-4) # the arm elsewhere
+    assert np.allclose(score(images([2], 2.0, 1.0)), 0, atol = 1e-4)  # halfway
+    assert change_score(goal, before, goal)[0] < 0 # the average of the pairs can't tell that the block is at one of the places
+    same = before.clone()
+    assert np.allclose(patches_score(same, same, before).numpy(), -1) # no pair shows a change
+    weak = goal.clone().reshape(3, 8, PATCH_DIM)
+    weak[:, 1] = 0.5 # a patch that changes little, 1/8 of the strongest one
+    query = weak.clone()
+    query[:, 1] = 30.0
+    assert np.allclose(patches_score(weak.flatten(1), before, query.flatten(1)).numpy(), 1, atol = 1e-4) # doesn't count
+    assert (patches_score(weak.flatten(1), before, query.flatten(1), changed = 0.05).numpy() != 1).any()
+
+
+def test_patches_settings():
+    before = {"before_examples" : "x.hdf5"}
+    settings = switch_settings({"switch" : {"criterion" : "patches"}}, {"switch" : before})
+    assert [settings[key] for key in ["criterion", "margin", "tolerance", "patience"]] == ["patches", 0.5, 0.05, 10]
+    release = {**before, "default_criterion" : "patches"} # what make_task.py writes for a release step
+    assert switch_settings({}, {"switch" : release})["criterion"] == "patches"
+    assert switch_settings({"switch" : {"criterion" : "peak"}}, {"switch" : release})["criterion"] == "peak" # a plan's variant decides
+    assert switch_settings({"switch" : {"criterion" : "patches", "margin" : 0.4}}, {})["margin"] == 30 # a step without pictures falls back
+    for bad in [{**before, "criterion" : "patches", "margin" : 30}, {**before, "criterion" : "patches", "changed" : 2}]:
+        with pytest.raises(ValueError):
+            switch_settings({}, {"switch" : bad})
+
+
+def test_patches_switch_moves_on():
+    switch = {**SWITCH_DEFAULTS, **PATCHES_DEFAULTS, "patience" : 2, "min_steps" : 0}
+    image = lambda value: torch.full((1, PATCH_DIM), float(value))
+    steps = [GoalStepGuidance("open", None, None, None, 1.0, switch, image(100), None, image(0)),
+             GoalStepGuidance("last", None, None, None, 1.0, switch, None, None)]
+    assert steps[0].criterion.criterion == "patches"
+    done = [steps[0].check(image(value))[0] for value in [0, 40, 90, 100, 101, 101]]
+    assert done == [False] * 5 + [True]
 
 
 def test_before_examples_must_be_twins():

@@ -1,0 +1,49 @@
+{
+    "description": "The chains of plan_goal_switch.json with the patches criterion: the change score only on the patches the step changes, the best fitting pair counts. Same start scenes, so it compares with the change and oracle runs of plan_goal_switch.json. Run on the workstation with dynaguide_scripts/run_goal_switch_patches.bat",
+    "n_rollouts": 20,
+    "horizon": 800,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "video_skip": 4,
+    "experiments": {
+        "drawer_button_door": {
+            "config": "datasets/guidance_conditions/drawer_button_door/experiment.json",
+            "switch_variants": {
+                "patches": {
+                    "criterion": "patches"
+                }
+            },
+            "seed": 0
+        },
+        "door_drawer_switch": {
+            "config": "datasets/guidance_conditions/door_drawer_switch/experiment.json",
+            "switch_variants": {
+                "patches": {
+                    "criterion": "patches"
+                }
+            },
+            "seed": 1
+        },
+        "button_switch_drawer": {
+            "config": "datasets/guidance_conditions/button_switch_drawer/experiment.json",
+            "switch_variants": {
+                "patches": {
+                    "criterion": "patches"
+                }
+            },
+            "seed": 2
+        },
+        "door_switch_button": {
+            "config": "datasets/guidance_conditions/door_switch_button/experiment.json",
+            "switch_variants": {
+                "patches": {
+                    "criterion": "patches"
+                }
+            },
+            "seed": 3
+        }
+    }
+}

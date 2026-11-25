@@ -248,6 +248,28 @@ def test_made_single_block_task_succeeds_in_order():
     assert tracker.success and done[-1] and tracker.steps_completed == 4
 
 
+def test_release_twins_have_no_block(tmp_path):
+    """A release step gets goal_examples at places all over the drawer, and before_examples in which only the block is gone."""
+    import h5py
+    folder = made("blue_table_to_open_drawer")
+    steps = load(os.path.join(folder, "experiment.json"))["goal_sequence"]
+    grip, release = steps[0], steps[-1]
+    if "before_examples" not in release.get("switch", {}):
+        pytest.skip("blue_table_to_open_drawer is from before the patches criterion, make it again")
+    assert "before_examples" not in grip.get("switch", {}) and release["switch"]["default_criterion"] == "patches"
+    index = BLOCK_INDEX["blue"]
+    places = list()
+    with h5py.File(release["switch"]["goal_examples"], "r") as goal, h5py.File(release["switch"]["before_examples"], "r") as before:
+        assert sorted(goal["data"]) == sorted(before["data"])
+        for demo in goal["data"]:
+            a, b = [file[f"data/{demo}/obs/states"][-1] for file in [goal, before]]
+            assert np.allclose(*[file[f"data/{demo}/obs/proprio"][-1] for file in [goal, before]])
+            places.append(tuple(a[index : index + 2].round(4)))
+            assert set(np.flatnonzero(~np.isclose(a, b, atol = 1e-6))) <= set(range(index, index + 6)) and b[index] > 2.0
+            assert (goal[f"data/{demo}/obs/third_person"][-1] != before[f"data/{demo}/obs/third_person"][-1]).any()
+    assert len(places) > 40 and len(set(places)) == len(places)
+
+
 @pytest.mark.parametrize("name", CHAINS)
 def test_before_examples_of_a_made_task(name):
     """Each before_example is its condition with nothing but the joint of the step changed, back to where it was before the step."""

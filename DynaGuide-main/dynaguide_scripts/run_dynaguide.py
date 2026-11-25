@@ -406,7 +406,7 @@ def run_trained_agent(args):
                 for key in ["pos_examples", "neg_examples"]:
                     if entry.get(key) is not None:
                         condition_files(entry[key])
-                for key in ["contrast_examples", "before_examples"]:
+                for key in ["contrast_examples", "before_examples", "goal_examples"]:
                     if entry.get("switch", {}).get(key) is not None:
                         condition_files(entry["switch"][key])
         else:
@@ -447,6 +447,7 @@ def run_trained_agent(args):
                                 "bad_dataset" : conditions(entry["neg_examples"]) if use_neg else None,
                                 "contrast_dataset" : conditions(switch["contrast_examples"]) if switch.get("contrast_examples") is not None else None,
                                 "before_dataset" : conditions(switch["before_examples"]) if switch.get("before_examples") is not None else None,
+                                "goal_dataset" : conditions(switch["goal_examples"]) if switch.get("goal_examples") is not None else None,
                                 "scale" : entry.get("scale", args.scale), "alpha" : entry.get("alpha", args.alpha), "switch" : switch})
         classifier_grad = MultiGoalGuidance.build(model, step_inputs, MAIN_CAMERA, DEVICE, max_examples = args.max_examples,
                                                   action_chunk_length = ACTION_CHUNK_LENGTH)

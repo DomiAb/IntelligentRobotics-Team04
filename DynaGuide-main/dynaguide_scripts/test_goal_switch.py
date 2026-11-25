@@ -13,15 +13,15 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 
 from core.calvin_behaviors import ARTICULATED, COMPLETED
 from core.dynaguide import DEVICE
-from core.guidance_conditions import read_recordings, segment_recording
-from core.multigoal_guidance import CHANGE_DEFAULTS, SWITCH_DEFAULTS, SwitchCriterion, change_score, embed_states
+from core.guidance_conditions import StateView, find_frames, read_recordings, segment_recording
+from core.multigoal_guidance import PAIR_DEFAULTS, PAIR_SCORES, SWITCH_DEFAULTS, SwitchCriterion, embed_states
 from make_task import before_state
 from recombine_conditions import DEFAULT_ENV_CONFIG, GOALS, STATE_INDEX, Simulator, make_env
 from scene_tools import held_joint_moved, new_contacts, read_condition_poses
 
 """
-Tests the change criterion of the goal switch (core/multigoal_guidance.py) in three ways, see "Multigoal guidance.ipynb". No rollouts are
-run here. The truth is always the joint in the simulator state, which the switch never sees.
+Tests the change and patches criteria of the goal switch (core/multigoal_guidance.py) in three ways, see "Multigoal guidance.ipynb". No rollouts are
+run here. The truth is always the simulator state (the joint, or where the block is), which the switch never sees.
 
 live        what the switch did in finished rollouts of run_experiments.py, read from their logs. Nothing is rendered or embedded
                 python dynaguide_scripts/test_goal_switch.py live --results results/goal_switch results/goal_switch_previous
@@ -30,6 +30,7 @@ replay      runs the switch of every step over recorded rollouts of a made task,
             the oracle or another switch, where it can be wrong in other ways. Every step's switch runs over the whole episode, also while
             DynaGuide wasn't guiding that step, so this contains many chances to switch wrongly
                 python dynaguide_scripts/test_goal_switch.py replay --results results/goal_switch --guidance dynamics_model_5900.pth
+            --task takes the conditions from another folder, e.g. the task made again with before_examples
 
 recordings  the same for any recordings, without a task: for each recorded behavior the conditions are made in the scene it starts from,
             from the poses of datasets/robot_poses (without the poses that come from the same place), and the switch runs over the
@@ -38,7 +39,7 @@ recordings  the same for any recordings, without a task: for each recorded behav
                     --guidance dynamics_model_5900.pth --output results/goal_switch_recordings
 
 What is counted. A joint is "reached" past COMPLETED of the behavior (what the env counts as done), "at the start" on the start side of
-ARTICULATED, else "on the way". For each step of each episode:
+ARTICULATED, else "on the way". A release step is reached while its "where" holds, else at the start. For each step of each episode:
     correct         switched while reached, with the delay in env steps since it was reached
     on the way      switched with the joint between start and reached. The list of joint values shows how far off it was
     false           switched with the joint still at the start. The worst kind
@@ -46,22 +47,26 @@ ARTICULATED, else "on the way". For each step of each episode:
     too short       reached, but the recording ends sooner than that
     quiet           not reached and not switched, as it should be
     already         reached before the step began (the LED was already on): switched or not, no test
-The scores of replay and recordings are saved (scores.npz of --output or the results folder), and --analyze_only evaluates them again for
---margins, --patience and --tolerance.
+replay and recordings compute both criteria from the same frames. Their scores are saved (scores.npz of --output or the results folder),
+and --analyze_only evaluates them again for --margins, --patience and --tolerance. The tables are in switch_replay.json (change) and
+switch_replay_patches.json (patches).
 """
 
 MAIN_CAMERA = "third_person"
 JOINT_OF = {rising : (idx, low, high, True) for idx, low, high, rising, falling in ARTICULATED}
 JOINT_OF.update({falling : (idx, low, high, False) for idx, low, high, rising, falling in ARTICULATED})
 MISSED_AFTER = 40
+RELEASE = "release_" # "release_blue" is the name of a step that lets go of the blue block
 OUTCOMES = ["correct", "on the way", "false", "missed", "too short", "quiet", "already"]
 
 # --- the truth ----------------------------------------------------------------------------------------------------------------------
 
 def joint_side(behavior, value):
-    """1 where the joint is reached, 0 at the start, -1 on the way."""
-    _, low, high, rising = JOINT_OF[behavior]
+    """1 where the joint is reached, 0 at the start, -1 on the way. For a release step the values are 1 where its "where" holds, else 0."""
     value = np.asarray(value)
+    if behavior.startswith(RELEASE):
+        return np.where(value == 1, 1, 0)
+    _, low, high, rising = JOINT_OF[behavior]
     if rising:
         reached, start = value > COMPLETED.get(behavior, high), value < low
     else:
@@ -150,9 +155,25 @@ def finished_runs(folders):
 
 
 def step_behavior(entry):
-    """The one joint behavior a goal step asks for, or None (a block step)."""
+    """The one joint behavior a goal step asks for, "release_<block>" for a step that lets go of a block, or None (a grip)."""
     names = [name for name in entry.get("behaviors", []) if name in JOINT_OF]
-    return names[0] if len(names) == 1 else None
+    if len(names) == 1:
+        return names[0]
+    blocks = entry.get("where", {}).get("blocks", {})
+    if len(blocks) == 1:
+        (color, spec), = blocks.items()
+        words = spec if isinstance(spec, list) else [spec]
+        if "released" in words or "resting" in words:
+            return RELEASE + color
+    return None
+
+
+def truth_values(entry, states, proprio):
+    """What joint_side takes for the step: the joint, or 1 where the block is as the step's "where" says."""
+    behavior = step_behavior(entry)
+    if behavior.startswith(RELEASE):
+        return np.asarray(find_frames(StateView(states, proprio), entry["where"]), dtype = float)
+    return states[:, JOINT_OF[behavior][0]]
 
 
 def episodes(rollout_file):
@@ -168,14 +189,14 @@ def live(args):
     for experiment, variant, config, log, rollout_file in finished_runs(args.results):
         steps = config["goal_sequence"]
         switch_logs = log["Episode_Switches"]
-        for number, (demo, states, _) in enumerate(episodes(rollout_file)):
+        for number, (demo, states, proprio) in enumerate(episodes(rollout_file)):
             begin = 0
             for k, entry in enumerate(steps[:-1]): # the last step is ended by the env
                 switched = next((s["t"] for s in switch_logs[number]["switches"] if s["from_step"] == k), None)
                 behavior = step_behavior(entry)
                 if behavior is not None:
                     frames = np.arange(begin, len(states) if switched is None else switched + 1)
-                    values = states[frames, JOINT_OF[behavior][0]]
+                    values = truth_values(entry, states[frames], proprio[frames])
                     result, delay = outcome(joint_side(behavior, values), frames, switched, len(states) - 1)
                     table.add(f"{experiment}/{variant}", behavior, result, delay, values[-1], demo)
                 if switched is None:
@@ -225,19 +246,35 @@ def last_images(path):
         return [file["data"][demo]["obs"][MAIN_CAMERA][-1] for demo in demos]
 
 
+def pair_scores(goal, before, query):
+    """{criterion : its score of each query}, from the same embeddings."""
+    return {name : function(goal, before, query, SWITCH_DEFAULTS).cpu().numpy() for name, function in PAIR_SCORES.items()}
+
+
 class Scores:
-    """The change score of a goal over the frames of an episode, one entry per (episode, goal)."""
+    """The scores of a goal over the frames of an episode, one entry per (episode, goal). "score" is the change score, "patches" the other."""
     def __init__(self):
         self.entries = list()
 
-    def add(self, group, label, behavior, steps, score, joint, last_step):
+    def add(self, group, label, behavior, steps, scores, joint, last_step):
         self.entries.append({"group" : group, "label" : label, "behavior" : behavior, "steps" : np.asarray(steps),
-                             "score" : np.asarray(score), "joint" : np.asarray(joint), "last_step" : int(last_step)})
+                             "score" : np.asarray(scores["change"]), "joint" : np.asarray(joint), "last_step" : int(last_step),
+                             "patches" : None if scores.get("patches") is None else np.asarray(scores["patches"])})
+
+    def of(self, criterion):
+        """The entries with this criterion's score as "score". None if the file is from before the patches criterion."""
+        if criterion == "change":
+            return self
+        if any(entry["patches"] is None for entry in self.entries):
+            return None
+        scores = Scores()
+        scores.entries = [{**entry, "score" : entry["patches"]} for entry in self.entries]
+        return scores
 
     def save(self, path):
         arrays = {"names" : np.array([f"{e['group']}|{e['label']}|{e['behavior']}|{e['last_step']}" for e in self.entries])}
         for number, entry in enumerate(self.entries):
-            arrays.update({f"{key}/{number}" : entry[key] for key in ["steps", "score", "joint"]})
+            arrays.update({f"{key}/{number}" : entry[key] for key in ["steps", "score", "joint", "patches"] if entry[key] is not None})
         np.savez_compressed(path, **arrays)
 
     @classmethod
@@ -246,14 +283,15 @@ class Scores:
         with np.load(path) as data:
             for number, name in enumerate(data["names"]):
                 group, label, behavior, last_step = str(name).split("|")
-                scores.add(group, label, behavior, *[data[f"{key}/{number}"] for key in ["steps", "score", "joint"]], int(last_step))
+                both = {"change" : data[f"score/{number}"], "patches" : data.get(f"patches/{number}")}
+                scores.add(group, label, behavior, data[f"steps/{number}"], both, data[f"joint/{number}"], int(last_step))
         return scores
 
 
 def first_switch(entry, settings):
     """Runs the SwitchCriterion of the rollouts over the scores. patience is in env steps, the frames are every few steps."""
     stride = int(np.median(np.diff(entry["steps"]))) if len(entry["steps"]) > 1 else 1
-    criterion = SwitchCriterion({**settings, "patience" : max(1, round(settings["patience"] / stride))}, "change")
+    criterion = SwitchCriterion({**settings, "patience" : max(1, round(settings["patience"] / stride))}, settings["criterion"])
     for step, score in zip(entry["steps"], entry["score"]):
         if step - entry["steps"][0] >= settings["min_steps"] and criterion.update_score(float(score)):
             return int(step)
@@ -274,8 +312,17 @@ def evaluate(scores, settings):
 def analyze(scores, args, output):
     if len(scores.entries) == 0:
         raise SystemExit("No scores to evaluate, see the messages above")
-    settings = {**SWITCH_DEFAULTS, **CHANGE_DEFAULTS}
-    print(f"\nWith the defaults: margin {settings['margin']}, tolerance {settings['tolerance']}, patience {settings['patience']}\n")
+    for criterion in PAIR_DEFAULTS:
+        found = scores.of(criterion)
+        if found is None:
+            print(f"\nThe scores are from before the {criterion} criterion, run it again without --analyze_only")
+        else:
+            analyze_criterion(criterion, found, args, output)
+
+
+def analyze_criterion(criterion, scores, args, output):
+    settings = {**SWITCH_DEFAULTS, **PAIR_DEFAULTS[criterion]}
+    print(f"\n=== criterion {criterion} ===\n\nWith the defaults: margin {settings['margin']}, tolerance {settings['tolerance']}, patience {settings['patience']}\n")
     table = evaluate(scores, settings)
     table.print()
     sweep = list()
@@ -298,7 +345,7 @@ def analyze(scores, args, output):
                "start_max" : float(score[side == 0].max()) if (side == 0).any() else None}
         separation[behavior] = row
         print(f"{behavior:14s}" + "".join(f"   {key} {value:.2f}" if isinstance(value, float) else f"   {key} {value}" for key, value in row.items()))
-    path = os.path.join(output, "switch_replay.json")
+    path = os.path.join(output, "switch_replay.json" if criterion == "change" else f"switch_replay_{criterion}.json")
     with open(path, "w") as f:
         json.dump({"settings" : {key : settings[key] for key in ["margin", "tolerance", "patience", "min_steps"]}, "totals" : table.totals(),
                    "outcomes" : table.as_dict(), "sweep" : sweep, "separation" : separation}, f, indent = 2)
@@ -310,7 +357,7 @@ def replay(args):
     scores_file = os.path.join(output, "scores.npz")
     if args.analyze_only:
         return analyze(Scores.load(scores_file), args, output)
-    runs = finished_runs(args.results)
+    runs = [run for run in finished_runs(args.results) if args.experiments is None or run[0].startswith(tuple(args.experiments))]
     os.makedirs(output, exist_ok = True)
     embed, sim = Embedder(args.guidance, args.device), Simulator(make_env(args.env_config))
     scores, cached, start = Scores(), dict(), time.time()
@@ -319,29 +366,31 @@ def replay(args):
         for entry in config["goal_sequence"]:
             behavior, examples = step_behavior(entry), entry.get("pos_examples")
             if behavior is None or not isinstance(examples, str):
-                print(f"{experiment}: step {entry.get('name')} isn't one joint behavior with one condition file, skipped")
+                print(f"{experiment}: step {entry.get('name')} isn't one joint behavior or release with one condition file, skipped")
                 continue
             examples = examples.replace("\\", "/") # a run from the workstation, looked at on another machine
-            files = [os.path.join(args.task or os.path.dirname(examples), os.path.basename(examples)[:-5] + end) for end in [".hdf5", "_before.hdf5"]]
+            base = os.path.join(args.task or os.path.dirname(examples), os.path.basename(examples)[:-5])
+            files = [base + "_switch.hdf5" if os.path.isfile(base + "_switch.hdf5") else base + ".hdf5", base + "_before.hdf5"]
             if not all(os.path.isfile(path) for path in files):
                 print(f"{experiment}: step {entry.get('name')} has no {files[1]}, skipped")
                 continue
             if files[0] not in cached:
                 cached[files[0]] = [embed(last_images(path)) for path in files]
-            goals.append((behavior, *cached[files[0]]))
+            goals.append((behavior, entry, *cached[files[0]]))
         for number, (demo, states, proprio) in enumerate(episodes(rollout_file)):
             if len(goals) == 0 or (args.max_episodes is not None and number >= args.max_episodes):
                 break
             frames = np.arange(0, len(states), args.stride)
             images = rendered(sim, states, proprio, frames)
-            parts = {behavior : list() for behavior, _, _ in goals}
+            parts = [list() for _ in goals]
             for begin in range(0, len(frames), 16):
                 query = embed(images[begin:begin + 16])
-                for behavior, goal, before in goals:
-                    parts[behavior].append(change_score(goal, before, query).cpu().numpy())
-            for behavior, _, _ in goals:
-                scores.add(f"{experiment}/{variant}", demo, behavior, frames, np.concatenate(parts[behavior]),
-                           states[frames, JOINT_OF[behavior][0]], len(states) - 1)
+                for part, (_, _, goal, before) in zip(parts, goals):
+                    part.append(pair_scores(goal, before, query))
+            for part, (behavior, entry, _, _) in zip(parts, goals):
+                both = {name : np.concatenate([scored[name] for scored in part]) for name in PAIR_SCORES}
+                scores.add(f"{experiment}/{variant}", demo, behavior, frames, both, truth_values(entry, states[frames], proprio[frames]),
+                           len(states) - 1)
             print(f"{experiment}/{variant} {demo}: {len(frames)} frames, {time.time() - start:.0f} s", flush = True)
         scores.save(scores_file)
     analyze(scores, args, output)
@@ -422,8 +471,8 @@ def recordings(args):
                 if len(images[0]) < 2:
                     print(f"{recording.name}:{first} {goal}: {len(images[0])} poses fit the scene, skipped")
                     continue
-                score = change_score(embed(images[0]), embed(images[1]), query).cpu().numpy()
-                scores.add(group + (" (its goal)" if goal == behavior else " (another goal)"), f"{recording.name}:{first}", goal, frames, score,
+                both = pair_scores(embed(images[0]), embed(images[1]), query)
+                scores.add(group + (" (its goal)" if goal == behavior else " (another goal)"), f"{recording.name}:{first}", goal, frames, both,
                            recording.states[frames, JOINT_OF[goal][0]], end)
             print(f"{behavior} {recording.name}:{first}: {len(frames)} frames, {[goal for goal, _ in goals]}, {time.time() - start:.0f} s", flush = True)
             scores.save(scores_file)
@@ -439,7 +488,7 @@ if __name__ == "__main__":
     common.add_argument("--env_config", default = DEFAULT_ENV_CONFIG)
     common.add_argument("--stride", type = int, default = 4, help = "every n-th env step. patience is converted")
     common.add_argument("--analyze_only", action = "store_true", help = "only evaluate the saved scores again")
-    common.add_argument("--margins", type = float, nargs = "+", default = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4])
+    common.add_argument("--margins", type = float, nargs = "+", default = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7])
     common.add_argument("--patience", type = int, nargs = "+", default = [5, 10, 20])
     common.add_argument("--tolerance", type = float, nargs = "+", default = [0.05])
     p = modes.add_parser("live", help = "what the switch did in finished rollouts")
@@ -449,6 +498,7 @@ if __name__ == "__main__":
     p.add_argument("--results", nargs = "+", required = True, help = "output folders of run_experiments.py")
     p.add_argument("--output", default = None, help = "default: the first results folder")
     p.add_argument("--task", default = None, help = "folder of the made task, default: the folder of each step's pos_examples")
+    p.add_argument("--experiments", nargs = "+", default = None, help = "only experiments whose name starts with one of these")
     p.add_argument("--max_episodes", type = int, default = None, help = "per task")
     p = modes.add_parser("recordings", parents = [common], help = "the switch over any recordings")
     p.add_argument("--recordings", nargs = "+", required = True, help = "CALVIN folders, or rollout files of single-goal experiments")
