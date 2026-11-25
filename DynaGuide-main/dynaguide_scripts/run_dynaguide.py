@@ -406,8 +406,9 @@ def run_trained_agent(args):
                 for key in ["pos_examples", "neg_examples"]:
                     if entry.get(key) is not None:
                         condition_files(entry[key])
-                if entry.get("switch", {}).get("contrast_examples") is not None:
-                    condition_files(entry["switch"]["contrast_examples"])
+                for key in ["contrast_examples", "before_examples"]:
+                    if entry.get("switch", {}).get(key) is not None:
+                        condition_files(entry["switch"][key])
         else:
             validate_experiment_config(exp_setup_config) # catch a typo in the config before spending time on rollouts
             for key in ["pos_examples"] + (["neg_examples"] if exp_setup_config["use_neg"] else []):
@@ -445,6 +446,7 @@ def run_trained_agent(args):
                                 "good_dataset" : conditions(entry["pos_examples"]) if entry.get("pos_examples") is not None else None,
                                 "bad_dataset" : conditions(entry["neg_examples"]) if use_neg else None,
                                 "contrast_dataset" : conditions(switch["contrast_examples"]) if switch.get("contrast_examples") is not None else None,
+                                "before_dataset" : conditions(switch["before_examples"]) if switch.get("before_examples") is not None else None,
                                 "scale" : entry.get("scale", args.scale), "alpha" : entry.get("alpha", args.alpha), "switch" : switch})
         classifier_grad = MultiGoalGuidance.build(model, step_inputs, MAIN_CAMERA, DEVICE, max_examples = args.max_examples,
                                                   action_chunk_length = ACTION_CHUNK_LENGTH)

@@ -1,0 +1,37 @@
+{
+    "description": "Press the button so the green LED turns off, turn the switch off, open the drawer. One of the chains that test the goal switch, see run_goal_switch.bat. No blocks, scale and alpha of the paper per behavior. Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "drawer": "closed",
+        "sliding_door": "left",
+        "switch": "on",
+        "green_light": "on",
+        "blocks": {
+            "red": "hidden",
+            "blue": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "steps": [
+        {
+            "name": "button_off",
+            "poses": "articulated/button_off",
+            "contrast_poses": "articulated/button_on",
+            "scale": 1,
+            "alpha": 30
+        },
+        {
+            "name": "switch_off",
+            "poses": "articulated/switch_off",
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}

@@ -24,6 +24,8 @@ Makes a task: the guidance conditions of every goal step and the experiment conf
 
 Run it from DynaGuide-main. The output goes to datasets/guidance_conditions/<name of the task file>:
     <step>.hdf5 (.png)           the conditions of each step, <step>_contrast.hdf5 for a step with contrast_poses
+    <step>_before.hdf5 (.png)    for a step that changes a joint: each condition once more, with the same robot but the joint still as it
+                                 was before the step. The switch compares the two, see the change criterion in core/multigoal_guidance.py
     <task>_all.png               the first conditions of every step, labeled with what the scene shows at that step
     experiment.json              the experiment config for run_dynaguide.py / run_experiments.py, its pos_examples point to the files above
     manifest.json                the scene of every step, every condition with the pose it came from, every skipped pose and why
@@ -208,6 +210,32 @@ def render_step(sim, story, pose_set, entry, block, near = None):
     return path, rendered, attributes, kept, skipped
 
 
+def before_state(story, pose_set, state, block):
+    """The scene of a condition with the joint of the step back where it was before the step, everything else as in the condition."""
+    before = state.copy()
+    value = story.state[STATE_INDEX[pose_set.joint]]
+    if pose_set.joint == "drawer" and block is not None and not story.held and block_area(block, story.state) == "drawer":
+        before[BLOCK_INDEX[block] + 1] -= value - state[STATE_INDEX["drawer"]] # the block in the drawer moves with it
+    before[STATE_INDEX[pose_set.joint]] = value
+    if pose_set.joint == "green_light": # the button isn't pressed yet either
+        before[BUTTON_INDEX] = 0.0
+    return before
+
+
+def render_before(sim, story, pose_set, rendered, block):
+    """
+    The twin of every condition of an articulated step, see before_state. The robot may be inside something here, like the gripper in
+    the closed drawer. That doesn't matter: the image is only compared with its condition, to see what the step changes.
+    """
+    twins = list()
+    for _, state, pose in rendered:
+        before = before_state(story, pose_set, state, block)
+        sim.set(before, pose["proprio"])
+        before[4] = float(before[STATE_INDEX["switch"]] > sim.switch_threshold) # the lightbulb follows the switch
+        twins.append((sim.render(), before, pose))
+    return twins
+
+
 def check_story(story, rendered, pose_set, block, reset):
     """Every condition shows the story's scene, apart from the step's own joint and the task's block. Raises an error otherwise (a bug)."""
     for _, state, pose in rendered:
@@ -320,6 +348,13 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
         save_preview(condition_file[:-5] + ".png", segments)
         rows.append((f"{name} | {scene}", [images["third_person"] for images, _, _ in rendered]))
         step["pos_examples"] = condition_file
+        if pose_set.kind == "articulated": # a block step changes nothing that stays in place, its switch is the older one
+            twins = render_before(sim, story, pose_set, rendered, block)
+            before_file = os.path.join(output, f"{name}_before.hdf5")
+            segments = write_rendered(before_file, twins, f"{name}_before", attributes)
+            save_preview(before_file[:-5] + ".png", segments)
+            rows.append((f"{name} before | {scene}", [images["third_person"] for images, _, _ in twins]))
+            step["switch"] = {**step.get("switch", dict()), "before_examples" : before_file}
         config["goal_sequence"].append(step)
         advance(story, pose_set, rendered, entry)
 

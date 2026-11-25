@@ -23,10 +23,11 @@ pytest.importorskip("calvin_env")
 from core.calvin_utils import BLOCK_INDEX, HIDDEN_POS, PLACES
 from core.goal_sequence import SequentialGoalTracker, validate_multigoal_config
 from extract_block_poses import base_set_folder, candidate_frames, frame_kinds
-from make_task import PoseSet, Story, TaskError, check_before, default_goal, fixed_reset
+from make_task import PoseSet, Story, TaskError, before_state, check_before, default_goal, fixed_reset
 from scene_tools import block_area, held_joint_moved, joint_combinations, long_side_along_gripper, put_block_at_place, scene_name
 
 TASKS = "calvin_exp_configs_examples/tasks"
+CHAINS = ["drawer_button_door", "door_drawer_switch", "button_switch_drawer", "door_switch_button"] # the tasks of run_goal_switch.bat
 TASK_NAMES = ["blue_table_to_open_drawer", "blue_table_to_open_drawer_one_step", "single_block_drawer"]
 
 
@@ -163,6 +164,30 @@ def test_steps_must_fit_the_story(tmp_path):
     assert default_goal(PoseSet("blocks/grip_table/grip_right", str(tmp_path)), "blue") == {"where" : {"blocks" : {"blue" : "held"}}}
     assert default_goal(PoseSet("blocks/release_drawer", str(tmp_path)), "blue") == {"where" : {"blocks" : {"blue" : ["drawer", "released"]}}}
 
+def test_before_state(tmp_path):
+    (tmp_path / "articulated" / "drawer_close").mkdir(parents = True)
+    (tmp_path / "articulated" / "button_on").mkdir(parents = True)
+    story = Story(fixed_reset(load(f"{TASKS}/single_block_drawer.json")["env_setup"]), "blue")
+    story.set_joint("drawer", 0.2)
+    put_block_at_place(story.state, "blue", "drawer_center")
+    closed = story.state.copy() # what a drawer_close condition shows: closed, the block in it
+    closed[1], closed[13] = 0.0, closed[13] + 0.2
+    before = before_state(story, PoseSet("articulated/drawer_close", str(tmp_path)), closed, "blue")
+    assert np.allclose(before, story.state) # open again, the block moved out with it
+    pressed = story.state.copy()
+    pressed[2], pressed[5] = 0.02, 1.0
+    assert np.allclose(before_state(story, PoseSet("articulated/button_on", str(tmp_path)), pressed, "blue"), story.state)
+
+
+def test_chains_test_every_joint_behavior():
+    """Every joint behavior is a step that the switch has to end, so not the last one of a chain."""
+    switched = set()
+    for name in CHAINS:
+        task = load(f"{TASKS}/{name}.json")
+        fixed_reset(task["env_setup"])
+        switched |= {step["poses"].split("/")[1] for step in task["steps"][:-1]}
+    assert switched == {"drawer_open", "drawer_close", "door_left", "door_right", "switch_on", "switch_off", "button_on", "button_off"}
+
 # --- the made tasks -----------------------------------------------------------------------------------------------------------------
 
 def made(name):
@@ -221,3 +246,22 @@ def test_made_single_block_task_succeeds_in_order():
     at(drawer = 0.10, blue = [0.18, -0.19, 0.3624]); at(drawer = 0.0, blue = [0.18, -0.09, 0.3624], tcp = [0.175, -0.2, 0.40]) # closed
     done = [tracker.update(s, p) for s, p in path]
     assert tracker.success and done[-1] and tracker.steps_completed == 4
+
+
+@pytest.mark.parametrize("name", CHAINS)
+def test_before_examples_of_a_made_task(name):
+    """Each before_example is its condition with nothing but the joint of the step changed, back to where it was before the step."""
+    import h5py
+    folder = made(name)
+    joint = {"drawer" : 1, "door" : 0, "switch" : 3, "button" : 5}
+    for step in load(os.path.join(folder, "experiment.json"))["goal_sequence"]:
+        index, rising = joint[step["behaviors"][0].split("_")[0]], step["behaviors"][0].split("_")[1] in ["open", "left", "on"]
+        with h5py.File(step["pos_examples"], "r") as goal, h5py.File(step["switch"]["before_examples"], "r") as before:
+            assert sorted(goal["data"]) == sorted(before["data"])
+            for demo in goal["data"]:
+                a, b = [file[f"data/{demo}/obs/states"][-1] for file in [goal, before]]
+                assert np.allclose(*[file[f"data/{demo}/obs/proprio"][-1] for file in [goal, before]])
+                assert (a[index] > b[index]) == rising and abs(a[index] - b[index]) > 0.05
+                may_differ = {index} | ({2} if index == 5 else set()) | ({4} if index == 3 else set()) # the button, the lightbulb
+                assert set(np.flatnonzero(~np.isclose(a, b, atol = 1e-6))) <= may_differ
+                assert (goal[f"data/{demo}/obs/third_person"][-1] != before[f"data/{demo}/obs/third_person"][-1]).any()

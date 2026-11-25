@@ -1,0 +1,53 @@
+{
+    "description": "Tests the goal switch: four chains of three joint behaviors, every one of the eight behaviors is once a step that the switch has to end. change is the new switch (what the object looks like, not the arm), oracle moves on when the env sees the step done, so it shows what the guidance reaches without switch errors. Run on the workstation with dynaguide_scripts/run_goal_switch.bat",
+    "n_rollouts": 20,
+    "horizon": 800,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "video_skip": 4,
+    "experiments": {
+        "drawer_button_door": {
+            "config": "datasets/guidance_conditions/drawer_button_door/experiment.json",
+            "switch_variants": {
+                "change": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 0
+        },
+        "door_drawer_switch": {
+            "config": "datasets/guidance_conditions/door_drawer_switch/experiment.json",
+            "switch_variants": {
+                "change": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 1
+        },
+        "button_switch_drawer": {
+            "config": "datasets/guidance_conditions/button_switch_drawer/experiment.json",
+            "switch_variants": {
+                "change": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 2
+        },
+        "door_switch_button": {
+            "config": "datasets/guidance_conditions/door_switch_button/experiment.json",
+            "switch_variants": {
+                "change": {},
+                "oracle": {
+                    "mode": "oracle"
+                }
+            },
+            "seed": 3
+        }
+    }
+}

@@ -13,30 +13,35 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
     mode            "latent" (default): DynaGuide decides from its own embedding of the camera image, see below
                     "oracle": moves on when the SequentialGoalTracker of the env sees the step done. For comparison only, the robot
                     doesn't know the simulator state. With the oracle, a failure is the guidance's fault, not the switch's
-    embedding       what is compared, "observed" (default) or "predicted"
+    criterion       "change" (default for a step with before_examples): asks whether the object changed as in the conditions. before_examples
+                    show the same scene with the same robot as each goal condition, but with the step's change not done yet: drawer still
+                    closed, LED still off. The difference of the two images is the change, and the score says how much of it the current
+                    image shows: -1 as before, +1 as in the goal condition (change_score below). The arm is the same in both images, so
+                    it isn't part of the change, wherever it is. The score has no unit, so one margin fits all goals.
+                    Done when the score is above margin and stopped rising, i.e. no new maximum (by more than tolerance) for patience
+                    checks: so not halfway while the drawer is still moving. A step whose goal already holds at its start is done at once.
+                    make_task.py renders the before_examples of every step that changes a joint
+                    "peak" (default for a step without before_examples): the older switch, on the whole image. Uses the contrast score
+                    c = d_contrast - d_goal: how much more the current image looks like the goal conditions than like the contrast
+                    conditions (contrast_examples of the step, by default the goal conditions of the step before). Done when c has risen
+                    above margin and stopped rising, as above. Only the peak after the last check with c <= 0 counts, and there must be
+                    one: a step that starts out looking done isn't skipped. The arm is in both distances and doesn't cancel out if it
+                    stands elsewhere than in the contrast conditions, and the level of c differs a lot between behaviors (drawer ~200,
+                    door ~100 to 190, switch ~40 to 120), so one margin doesn't fit all of them
+                    "contrast": done when c > margin for patience checks in a row
+                    "relative": d_goal < ratio * spread of the goal conditions, where the spread is the median distance of a condition
+                              to its nearest other one. Needs no contrast, but robot pose and blocks count in full
+                    "threshold": d_goal < threshold, in the units of the embedding (L2 of the flattened patches)
+                    A step without before_examples uses "peak" instead of "change", without contrast conditions either (the first step)
+                    "relative" instead of "peak" and "contrast"
+    margin, tolerance, patience     see the criteria. Defaults for change: 0.2, 0.05 and 10, for the others: 30, 5 and 5 (margin and
+                    tolerance in the units of the embedding)
+    ratio, threshold    the numbers of relative and threshold
+    embedding       what is compared, "observed" (default) or "predicted" (not for change)
                     observed: the DINO patches of the current camera image against those of the last frames of the step's conditions.
                               Both are encoder outputs of real images, no prediction error, and they don't depend on the action
                     predicted: the dynamics model's prediction for the current image with the last action held, against the
                               condition embeddings the guidance uses
-    criterion       all but threshold and relative use the contrast score c = d_contrast - d_goal: how much more the current image looks
-                    like the goal conditions than like the contrast conditions. The contrast conditions show the state before the goal
-                    (contrast_examples of the step, by default the goal conditions of the step before). The robot pose and the blocks
-                    are in both distances and mostly cancel out, what is left is whether the goal happened
-                    "peak" (default): done when c has risen above margin and stopped rising: no new maximum (by more than
-                              tolerance) for patience checks. c peaks when the robot finishes the behavior, because the conditions show
-                              the end of a behavior. Only the peak after the last check with c <= 0 counts, and there must be one: a step
-                              that starts out looking done isn't skipped. A step whose goal already holds at its start needs the oracle
-                              or the contrast criterion
-                              The level c peaks at differs a lot between behaviors (drawer ~200, door ~100 to 190, switch ~40 to 120). The
-                              default margin 30 works for all of them, a drawer step is safer with "margin" : 150 (see the notebook)
-                    "contrast": done when c > margin for patience checks in a row. One margin doesn't fit all behaviors, because of
-                              the different levels
-                    "relative": d_goal < ratio * spread of the goal conditions, where the spread is the median distance of a condition
-                              to its nearest other one. Needs no contrast, but robot pose and blocks count in full
-                    "threshold": d_goal < threshold, in the units of the embedding (L2 of the flattened patches)
-                    A step without contrast conditions (the first one, unless it has contrast_examples) uses "relative"
-    margin, tolerance, ratio, threshold     the numbers of the criteria, in the units of the embedding
-    patience        checks in a row, see the criteria (default 5)
     min_steps       env steps a step is guided at least, before the switch is checked (default 10)
     check_every     check every this many env steps (default 1)
     replan_on_switch    throw away the queued actions of the old goal and plan with the new one right away (default true)
@@ -44,33 +49,47 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
 d_goal and d_contrast are soft minimums over the conditions, -alpha * logsumexp(-d / alpha), with the alpha of the step. That is the
 distance the guidance itself pulls on, close to the distance of the nearest condition.
 
-The defaults come from the calibration on the CALVIN debug set rendered in the simulator (dynaguide_scripts/calibrate_goal_switching.py),
-see the notebook: observed beats predicted, the contrast score beats d_goal alone, and the peak finds the end of a behavior
-for the drawer and the switch 3 to 11 steps after the env sees it, never before.
+dynaguide_scripts/test_goal_switch.py replays the switch over recorded rollouts, calibrate_goal_switching.py measures the older criteria.
+The numbers behind the defaults are in the notebook.
 """
 
 SWITCH_DEFAULTS = {"mode" : "latent", "embedding" : "observed", "criterion" : "peak", "margin" : 30.0, "tolerance" : 5.0, "ratio" : 1.0,
                    "threshold" : None, "patience" : 5, "min_steps" : 10, "check_every" : 1, "replan_on_switch" : True}
-SWITCH_KEYS = list(SWITCH_DEFAULTS) + ["contrast_examples"]
-CRITERIA = ["peak", "contrast", "relative", "threshold"]
+CHANGE_DEFAULTS = {"criterion" : "change", "margin" : 0.2, "tolerance" : 0.05, "patience" : 10} # what differs for the change criterion
+CRITERION_NUMBERS = ["margin", "tolerance", "patience"] # mean something else for change than for the others
+SWITCH_KEYS = list(SWITCH_DEFAULTS) + ["contrast_examples", "before_examples"]
+CRITERIA = ["change", "peak", "contrast", "relative", "threshold"]
 
 
 def switch_settings(config, step_entry):
-    """The switch settings of a step: the defaults, then the config's switch, then the step's."""
-    settings = dict(SWITCH_DEFAULTS)
-    for source in [config.get("switch", {}), step_entry.get("switch", {})]:
+    """The switch settings of a step: the defaults of its criterion, then the config's switch, then the step's."""
+    given = dict()
+    sources = [config.get("switch", {}), step_entry.get("switch", {})]
+    for source in sources:
         unknown = [key for key in source if key not in SWITCH_KEYS]
         if len(unknown) > 0:
             raise ValueError(f"Unknown switch settings {unknown}, choose from {SWITCH_KEYS}")
-        settings.update(source)
+        given.update(source)
+    has_before = given.get("before_examples") is not None
+    criterion = given.get("criterion", "change" if has_before and given.get("embedding", "observed") == "observed" else "peak")
+    if criterion not in CRITERIA:
+        raise ValueError(f"switch criterion must be one of {CRITERIA}, got {criterion}")
+    if criterion == "change" and not has_before:
+        if "criterion" in sources[1]:
+            raise ValueError("switch criterion change needs before_examples")
+        given = {key : value for key, value in given.items() if key not in CRITERION_NUMBERS or key in sources[1]} # the config's are for change
+        criterion = "peak"
+    settings = {**SWITCH_DEFAULTS, **(CHANGE_DEFAULTS if criterion == "change" else {}), **given, "criterion" : criterion}
     if settings["mode"] not in ["latent", "oracle"]:
         raise ValueError(f"switch mode must be latent or oracle, got {settings['mode']}")
     if settings["embedding"] not in ["observed", "predicted"]:
         raise ValueError(f"switch embedding must be observed or predicted, got {settings['embedding']}")
-    if settings["criterion"] not in CRITERIA:
-        raise ValueError(f"switch criterion must be one of {CRITERIA}, got {settings['criterion']}")
-    if settings["criterion"] == "threshold" and settings["threshold"] is None:
+    if criterion == "threshold" and settings["threshold"] is None:
         raise ValueError("switch criterion threshold needs a threshold")
+    if criterion == "change" and settings["embedding"] != "observed":
+        raise ValueError("switch criterion change needs the observed embedding")
+    if criterion == "change" and not -1 < settings["margin"] < 1:
+        raise ValueError(f"the score of the change criterion goes from -1 (before) to 1 (done), a margin of {settings['margin']} makes no sense")
     return settings
 
 # --- embeddings -------------------------------------------------------------------------------------------------------------------------
@@ -128,12 +147,36 @@ def spread(embeddings):
     return float(torch.median(distances.min(dim = 1).values))
 
 
+def change_score(goal, before, query):
+    """
+    How much of the change from the before images to the goal images each query shows: -1 as before, +1 as in the goal conditions.
+    - goal, before: embeddings [K, D], goal[k] and before[k] show the same scene and robot, apart from the change of the step
+    - query: embeddings [Q, D]
+    For one pair this is the query projected on the line from before to goal. What doesn't lie along this line, like another robot pose,
+    adds nothing, and a patch counts as much as the change moves it. Over the pairs it is the average weighted by how far they
+    are apart, so a pair that barely shows the change (the arm hides the object) barely counts.
+    """
+    direction, middle = goal - before, (goal + before) / 2
+    along = torch.stack([2 * ((q - middle) * direction).sum(dim = 1) for q in query]) # [Q, K], squared distance to before minus to the goal
+    return along.sum(dim = 1) / (direction * direction).sum()
+
+
 def observation_state(obs, main_camera, proprio_key = "proprio"):
     """The model's input for an observation of the env: the last frame of the frame stack, image as CHW 0-255."""
     image, proprio = np.asarray(obs[main_camera]), np.asarray(obs[proprio_key])
     if image.ndim == 4:
         image, proprio = image[-1], proprio[-1]
     return {main_camera : image * 255.0, proprio_key : proprio}
+
+
+def check_pairs(name, goal_dataset, before_dataset):
+    """The before_examples must be the twins of the goal conditions: as many, and each with the robot of its goal condition."""
+    goal, before = condition_last_frames(goal_dataset), condition_last_frames(before_dataset)
+    if len(goal) != len(before):
+        raise ValueError(f"Goal step {name}: {len(goal)} goal conditions but {len(before)} before_examples, each goal condition needs its own")
+    for number, ((goal_state, _), (before_state, _)) in enumerate(zip(goal, before)):
+        if not np.allclose(goal_state["proprio"], before_state["proprio"], atol = 1e-4):
+            raise ValueError(f"Goal step {name}: condition {number} and its before_example don't have the same robot pose")
 
 # --- deciding that a step is done -------------------------------------------------------------------------------------------------------
 
@@ -152,7 +195,7 @@ class SwitchCriterion:
 
     def reset(self):
         self.streak = 0 # checks in a row that look done (contrast, relative, threshold)
-        self.best = -float("inf") # highest contrast score of the step so far (peak)
+        self.best = -float("inf") # highest score of the step so far (change, peak)
         self.since_best = 0
         self.crossed = False # the contrast score was <= 0 during the step
 
@@ -165,8 +208,17 @@ class SwitchCriterion:
         return d_goal - self.settings["threshold"]
 
     def update(self, d_goal, d_contrast):
+        """One check of the criteria that work on distances. Returns True when the step is done."""
+        return self.update_score(self.score(d_goal, d_contrast))
+
+    def update_score(self, score):
         """One check. Returns True when the step is done."""
-        score = self.score(d_goal, d_contrast)
+        if self.criterion == "change":
+            if score <= 0 or score > self.best + self.settings["tolerance"]: # not there yet, or still rising
+                self.best, self.since_best = score, 0
+            else:
+                self.since_best += 1
+            return score > self.settings["margin"] and self.since_best >= self.settings["patience"]
         if self.criterion == "peak":
             margin, tolerance = self.settings["margin"], self.settings["tolerance"]
             if score <= 0: # looks like the contrast: a peak only counts after this
@@ -184,7 +236,8 @@ class SwitchCriterion:
 
 class GoalStepGuidance:
     """What DynaGuide holds for one goal step: its guidance function, and the embeddings to decide when the step is done."""
-    def __init__(self, name, guidance, good_embeddings, bad_embeddings, alpha, switch, goal_embeddings, contrast_embeddings):
+    def __init__(self, name, guidance, good_embeddings, bad_embeddings, alpha, switch, goal_embeddings, contrast_embeddings,
+                 before_embeddings = None):
         self.name = name
         self.guidance = guidance
         self.good_embeddings = good_embeddings # what the guidance pulls towards, also for the video collage
@@ -193,9 +246,13 @@ class GoalStepGuidance:
         self.switch = switch
         self.goal_embeddings = goal_embeddings # in the space of switch["embedding"]
         self.contrast_embeddings = contrast_embeddings
+        self.before_embeddings = before_embeddings # before_embeddings[k] belongs to goal_embeddings[k]
         self.criterion = None
         if switch["mode"] == "latent" and goal_embeddings is not None:
             criterion = switch["criterion"]
+            if criterion == "change" and len(before_embeddings) != len(goal_embeddings):
+                raise ValueError(f"Goal step {name}: {len(goal_embeddings)} goal conditions but {len(before_embeddings)} before_examples, "
+                                 "each goal condition needs its own")
             if criterion in ["peak", "contrast"] and contrast_embeddings is None:
                 print(f"Goal step {name}: no contrast conditions, the switch uses the relative criterion instead of {criterion}")
                 criterion = "relative"
@@ -206,6 +263,15 @@ class GoalStepGuidance:
         d_goal = float(soft_min_distance(self.goal_embeddings, query, self.alpha)[0])
         d_contrast = None if self.contrast_embeddings is None else float(soft_min_distance(self.contrast_embeddings, query, self.alpha)[0])
         return d_goal, d_contrast
+
+    def check(self, query):
+        """One check of the switch for one query embedding [1, D]. Returns (done, score, d_goal, d_contrast)."""
+        d_goal, d_contrast = self.distances(query)
+        if self.criterion.criterion == "change":
+            score = float(change_score(self.goal_embeddings, self.before_embeddings, query)[0])
+        else:
+            score = self.criterion.score(d_goal, d_contrast)
+        return self.criterion.update_score(score), score, d_goal, d_contrast
 
 
 class MultiGoalGuidance:
@@ -224,7 +290,8 @@ class MultiGoalGuidance:
     @classmethod
     def build(cls, model, step_inputs, main_camera, device, max_examples = None, action_chunk_length = 16):
         """
-        - step_inputs: per step a dict with name, good_dataset, bad_dataset, contrast_dataset (or None), scale, alpha, switch (settings)
+        - step_inputs: per step a dict with name, good_dataset, bad_dataset, contrast_dataset and before_dataset (or None), scale, alpha,
+          switch (settings)
         The contrast conditions default to the goal conditions of the step before.
         """
         steps = list()
@@ -234,16 +301,19 @@ class MultiGoalGuidance:
                                                                 scale = inputs["scale"], bad_dataset = inputs["bad_dataset"],
                                                                 alpha = inputs["alpha"], max_examples = max_examples, device = device)
             switch = inputs["switch"]
-            goal, contrast = None, None
+            goal, contrast, before = None, None, None
             if switch["mode"] == "latent" and number < len(step_inputs) - 1: # the last step is ended by the env
                 goal = cls._switch_embeddings(model, inputs["good_dataset"], switch["embedding"], device, max_examples)
-                if inputs.get("contrast_dataset") is not None:
+                if switch["criterion"] == "change":
+                    check_pairs(inputs["name"], inputs["good_dataset"], inputs["before_dataset"])
+                    before = cls._switch_embeddings(model, inputs["before_dataset"], switch["embedding"], device, max_examples)
+                elif inputs.get("contrast_dataset") is not None:
                     contrast = cls._switch_embeddings(model, inputs["contrast_dataset"], switch["embedding"], device, max_examples)
                 elif number > 0:
                     previous = steps[-1].goal_embeddings # None if the step before uses the oracle
                     contrast = previous if previous is not None and steps[-1].switch["embedding"] == switch["embedding"] else \
                         cls._switch_embeddings(model, step_inputs[number - 1]["good_dataset"], switch["embedding"], device, max_examples)
-            steps.append(GoalStepGuidance(inputs["name"], guidance, good, bad, inputs["alpha"], switch, goal, contrast))
+            steps.append(GoalStepGuidance(inputs["name"], guidance, good, bad, inputs["alpha"], switch, goal, contrast, before))
         return cls(model, steps, main_camera, device, action_chunk_length)
 
     @staticmethod
@@ -258,7 +328,7 @@ class MultiGoalGuidance:
         self.current = 0
         self.step_start = 0
         self.switches = list()
-        self.trace = list() # (t, step, score, d_goal, d_contrast) of every check, the score as SwitchCriterion.score
+        self.trace = list() # (t, step, score, d_goal, d_contrast) of every check, the score as GoalStepGuidance.check
         for step in self.steps:
             if step.criterion is not None:
                 step.criterion.reset()
@@ -303,13 +373,10 @@ class MultiGoalGuidance:
 
         if t - self.step_start < switch["min_steps"] or t % switch["check_every"] != 0:
             return False
-        d_goal, d_contrast = self.step.distances(self._query(obs, last_action))
-        criterion = self.step.criterion
-        done = criterion.update(d_goal, d_contrast)
-        score = criterion.score(d_goal, d_contrast)
+        done, score, d_goal, d_contrast = self.step.check(self._query(obs, last_action))
         self.trace.append((t, self.current, score, d_goal, d_contrast))
         if done:
-            self._move_on(t, {"reason" : criterion.criterion, "score" : score, "d_goal" : d_goal, "d_contrast" : d_contrast})
+            self._move_on(t, {"reason" : self.step.criterion.criterion, "score" : score, "d_goal" : d_goal, "d_contrast" : d_contrast})
             return True
         return False
 
@@ -322,5 +389,5 @@ class MultiGoalGuidance:
     def log(self):
         """What run_dynaguide.py writes about the switching of this episode."""
         return {"switches" : self.switches, "final_step" : self.current,
-                "trace" : [[t, step, round(score, 2), round(d_goal, 2), None if d_contrast is None else round(d_contrast, 2)]
+                "trace" : [[t, step, round(score, 3), round(d_goal, 2), None if d_contrast is None else round(d_contrast, 2)]
                            for t, step, score, d_goal, d_contrast in self.trace]}

@@ -21,7 +21,8 @@ from core.calvin_behaviors import GoalTracker, detect_behaviors
 from core.goal_sequence import (SequentialGoalTracker, parse_goal_sequence, replay_sequence, summarize_sequence,
                                 validate_multigoal_config)
 from core.guidance_conditions import StateView, find_frames, read_recordings, state_matches
-from core.multigoal_guidance import GoalStepGuidance, MultiGoalGuidance, SWITCH_DEFAULTS, switch_settings
+from core.multigoal_guidance import (CHANGE_DEFAULTS, GoalStepGuidance, MultiGoalGuidance, SWITCH_DEFAULTS, SwitchCriterion, change_score,
+                                     check_pairs, switch_settings)
 
 VALIDATION = "datasets/calvin_debug_dataset/validation"
 
@@ -291,6 +292,82 @@ def test_switch_settings():
     for bad in [{"mode" : "magic"}, {"criterion" : "threshold"}, {"patiense" : 2}]:
         with pytest.raises(ValueError):
             switch_settings({"switch" : bad}, {})
+
+# --- the change criterion ---------------------------------------------------------------------------------------------------------------
+
+CHANGE = {**SWITCH_DEFAULTS, **CHANGE_DEFAULTS}
+
+
+def test_change_score():
+    """-1 as before, +1 as in the goal, and what isn't part of the change adds nothing."""
+    torch.manual_seed(0)
+    robot = torch.randn(4, 50) * 10 # the robot pose of each pair, the same before and after
+    goal, before = torch.cat([robot, torch.full((4, 3), 5.0)], dim = 1), torch.cat([robot, torch.zeros(4, 3)], dim = 1)
+    score = lambda query: change_score(goal, before, query).numpy()
+    assert np.allclose(score(goal), 1, atol = 1e-4) and np.allclose(score(before), -1, atol = 1e-4)
+    elsewhere = lambda value: torch.cat([torch.randn(5, 50) * 100, torch.full((5, 3), value)], dim = 1) # the robot anywhere else
+    assert np.allclose(score(elsewhere(5.0)), 1, atol = 1e-3) and np.allclose(score(elsewhere(0.0)), -1, atol = 1e-3)
+    assert np.allclose(score(elsewhere(2.5)), 0, atol = 1e-3) # halfway
+    hidden = torch.cat([robot[:1], torch.zeros(1, 3)], dim = 1) # a pair in which the arm hides the object: no change, no say
+    assert np.allclose(change_score(torch.cat([goal, hidden]), torch.cat([before, hidden]), goal).numpy(), 1, atol = 1e-4)
+
+
+def switch_at(scores, **settings):
+    criterion = SwitchCriterion({**CHANGE, **settings}, "change")
+    return next((t for t, score in enumerate(scores) if criterion.update_score(score)), None)
+
+
+def test_change_waits_until_the_score_stopped_rising():
+    rise = list(np.linspace(-0.8, 0.7, 31))                        # 0.05 per check, above the margin from check 21
+    assert switch_at(rise) is None                                 # still moving
+    assert switch_at(rise + [0.7] * 20, patience = 3) in [32, 33]  # comes to rest
+    assert switch_at([0.1] * 50) is None                           # rests below the margin
+    assert switch_at([-0.5] * 50) is None
+    assert switch_at([0.6] * 50) == 10                             # the goal holds already, nothing to wait for but patience
+    assert switch_at([0.6, 0.6, -0.4, -0.4] + rise) is None        # undone and done again: the first time doesn't count
+    assert switch_at([0.6, 0.6, -0.4, 0.5, 0.5, 0.5], patience = 2) == 5
+
+
+def test_change_settings():
+    before = {"before_examples" : "x.hdf5"}
+    settings = switch_settings({}, {"switch" : before})
+    assert [settings[key] for key in ["criterion", "margin", "tolerance", "patience"]] == ["change", 0.2, 0.05, 10]
+    assert switch_settings({}, {})["criterion"] == "peak" and switch_settings({}, {})["margin"] == 30
+    assert switch_settings({"switch" : {"margin" : 0.3}}, {"switch" : before})["margin"] == 0.3
+    previous = switch_settings({"switch" : {"criterion" : "peak"}}, {"switch" : before}) # the older switch, to compare
+    assert previous["criterion"] == "peak" and previous["margin"] == 30 and previous["patience"] == 5
+    fallback = switch_settings({"switch" : {"criterion" : "change", "margin" : 0.3}}, {}) # a block step among joint steps
+    assert fallback["criterion"] == "peak" and fallback["margin"] == 30
+    assert switch_settings({"switch" : {"embedding" : "predicted"}}, {"switch" : before})["criterion"] == "peak"
+    for bad in [{"criterion" : "change"}, {**before, "margin" : 30}, {**before, "criterion" : "change", "embedding" : "predicted"}]:
+        with pytest.raises(ValueError):
+            switch_settings({}, {"switch" : bad})
+
+
+def test_change_switch_moves_on():
+    """In the whole guidance, and the step without before_examples falls back to the older switch."""
+    switch = {**CHANGE, "patience" : 2, "min_steps" : 0}
+    values = lambda *numbers: torch.tensor(numbers, dtype = torch.float32).reshape(-1, 1)
+    steps = [GoalStepGuidance("open", None, None, None, 1.0, switch, values(100, 102), None, values(0, 2)),
+             GoalStepGuidance("last", None, None, None, 1.0, switch, None, None)]
+    guidance = MultiGoalGuidance(FakeModel(), steps, "third_person", "cpu")
+    done = [guidance.observe(fake_obs(value), t) for t, value in enumerate([0, 20, 60, 90, 100, 101, 101], 1)]
+    assert done == [False] * 6 + [True] and guidance.log()["switches"][0]["reason"] == "change"
+    assert guidance.log()["trace"][0][2] == pytest.approx(-1.02, abs = 0.01)
+    with pytest.raises(ValueError, match = "its own"):
+        GoalStepGuidance("open", None, None, None, 1.0, switch, values(100, 102), None, values(0))
+
+
+def test_before_examples_must_be_twins():
+    class Conditions:
+        def __init__(self, proprio):
+            self.lengths_list, self.proprio = [1] * len(proprio), proprio
+        def get_labeled_item(self, index):
+            return {"proprio" : np.full(15, self.proprio[index])}, None, None
+    check_pairs("open", Conditions([1.0, 2.0]), Conditions([1.0, 2.0]))
+    for wrong in [[1.0], [2.0, 1.0]]:
+        with pytest.raises(ValueError):
+            check_pairs("open", Conditions([1.0, 2.0]), Conditions(wrong))
 
 # --- with the dynamics model -------------------------------------------------------------------------------------------------------------
 
