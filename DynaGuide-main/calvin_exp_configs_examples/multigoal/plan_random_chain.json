@@ -1,0 +1,17 @@
+{
+    "description": "Random scenes, the chain button_switch_drawer (button off, switch off, drawer open, patches switch at 0.6): the door random, the three blocks somewhere on the table, conditions rendered in 4 random scenes. 30 rollouts. In the fixed scene this chain did 17 of 20. Run with dynaguide_scripts/run_random_scenes.bat",
+    "n_rollouts": 30,
+    "horizon": 800,
+    "scale": 1.5,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "video": false,
+    "experiments": {
+        "button_switch_drawer_random": {
+            "config": "datasets/guidance_conditions/random_button_switch_drawer/experiment.json",
+            "seed": 2
+        }
+    }
+}

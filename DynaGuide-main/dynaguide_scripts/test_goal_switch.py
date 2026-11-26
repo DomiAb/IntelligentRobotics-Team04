@@ -11,7 +11,7 @@ import torch
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
 
-from core.calvin_behaviors import ARTICULATED, COMPLETED
+from core.calvin_behaviors import ARTICULATED, DONE
 from core.dynaguide import DEVICE
 from core.guidance_conditions import StateView, find_frames, read_recordings, segment_recording
 from core.multigoal_guidance import PAIR_DEFAULTS, PAIR_SCORES, SWITCH_DEFAULTS, SwitchCriterion, embed_states
@@ -38,7 +38,7 @@ recordings  the same for any recordings, without a task: for each recorded behav
                 python dynaguide_scripts/test_goal_switch.py recordings --recordings datasets/D_Split/task_D_D/validation \\
                     --guidance dynamics_model_5900.pth --output results/goal_switch_recordings
 
-What is counted. A joint is "reached" past COMPLETED of the behavior (what the env counts as done), "at the start" on the start side of
+What is counted. A joint is "reached" past DONE of the behavior (what the env counts as done), "at the start" on the start side of
 ARTICULATED, else "on the way". A release step is reached while its "where" holds, else at the start. For each step of each episode:
     correct         switched while reached, with the delay in env steps since it was reached
     on the way      switched with the joint between start and reached. The list of joint values shows how far off it was
@@ -68,9 +68,9 @@ def joint_side(behavior, value):
         return np.where(value == 1, 1, 0)
     _, low, high, rising = JOINT_OF[behavior]
     if rising:
-        reached, start = value > COMPLETED.get(behavior, high), value < low
+        reached, start = value > DONE.get(behavior, high), value < low
     else:
-        reached, start = value < COMPLETED.get(behavior, low), value > high
+        reached, start = value < DONE.get(behavior, low), value > high
     return np.where(reached, 1, np.where(start, 0, -1))
 
 
@@ -124,7 +124,7 @@ class Table:
             delays = f"{np.mean(row['delays']):6.1f} / {max(row['delays'])}" if len(row["delays"]) > 0 else "-"
             print(f"{group + ' ' + behavior:44s}" + "".join(f"{row[name]:11d}" for name in OUTCOMES) + f"   {delays}")
             if len(row["joint_on_the_way"]) > 0:
-                print(f"{'':6s}on the way at {row['joint_on_the_way']}, reached is {COMPLETED.get(behavior)}")
+                print(f"{'':6s}on the way at {row['joint_on_the_way']}, reached is {DONE.get(behavior)}")
             if len(row["wrong"]) > 0:
                 print(f"{'':6s}{', '.join(row['wrong'])}")
         print(f"{'all':44s}" + "".join(f"{count:11d}" for count in self.totals().values()))

@@ -26,6 +26,7 @@ The plan:
     base_policy                 true adds a task per experiment with --scale 0 --ss 1, the base policy without guidance
                                 an experiment can override it with its own "base_policy", e.g. to run it once for two
                                 experiments that start from the same scenes
+    video                       false: no video, faster. dynaguide_scripts/render_rollout_videos.py renders it afterwards
     keep_images                 true keeps the images in the rollout files, so create_guidance_conditions.py can use them
     video_skip                  every how many steps a frame goes into the video, 2 by default. Rendering them takes almost half of
                                 the time of a rollout, so a higher number makes long runs faster
@@ -33,6 +34,7 @@ The plan:
                                 Each variant replaces pos_examples of the config: a path, a list of paths, or patterns with *.
                                 Without "conditions", the config's own pos_examples is the only variant, called "guided"
                                 "seed" : n is optional, by default the experiment's position in the plan (0, 1, ...)
+                                "env_setup" : {...} replaces the config's reset, the conditions stay
                                 A multi-goal config (goal_sequence, see core/goal_sequence.py) has its conditions in its steps, so
                                 instead of "conditions" it takes "switch_variants" : {variant : switch settings}, each merged into
                                 the config's "switch", like {"latent" : {}, "oracle" : {"mode" : "oracle"}}
@@ -49,7 +51,7 @@ The output folder:
 Running the tasks is shared with harvest_rollouts.py, see rollout_tasks.py.
 """
 
-EXPERIMENT_KEYS = ["config", "conditions", "switch_variants", "seed", "base_policy"] + GUIDANCE_SETTINGS
+EXPERIMENT_KEYS = ["config", "conditions", "switch_variants", "seed", "base_policy", "env_setup"] + GUIDANCE_SETTINGS
 MULTIGOAL_TARGET = "SUCCESS" # what run_dynaguide.py prints on the Rollout line of a multi-goal episode that did every step
 BASE_POLICY = "base_policy"
 
@@ -66,6 +68,8 @@ def make_tasks(plan):
             raise ValueError(f"Experiment {name}: needs 'config', can have {EXPERIMENT_KEYS[1:]}. Unknown keys: {unknown}")
         with open(entry["config"], "r") as f:
             config = json.load(f)
+        if "env_setup" in entry: # another reset with the same conditions, e.g. a random scene with conditions made for a fixed one
+            config = {**config, "env_setup" : entry["env_setup"]}
         guidance = guidance_settings(plan, entry)
         multigoal = is_multigoal(config)
         if multigoal:

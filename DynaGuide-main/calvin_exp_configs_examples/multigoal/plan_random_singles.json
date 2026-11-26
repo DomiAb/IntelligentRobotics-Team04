@@ -1,0 +1,73 @@
+{
+    "description": "Random scenes, single goals: each behavior alone, 20 rollouts in three ways. fixed: the fixed scene of the chain tests and its conditions (no blocks). random_env: a random scene (the other joints random, the three blocks somewhere on the table) with the fixed conditions. random: a random scene with conditions rendered in 4 random scenes. Same seed per behavior. Run with dynaguide_scripts/run_random_scenes.bat",
+    "n_rollouts": 20,
+    "horizon": 400,
+    "scale": 1,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "video": false,
+    "experiments": {
+        "drawer_open_fixed": {
+            "config": "datasets/guidance_conditions/fixed_drawer_open/experiment.json",
+            "seed": 10
+        },
+        "drawer_open_random_env": {
+            "config": "datasets/guidance_conditions/fixed_drawer_open/experiment.json",
+            "env_setup": {
+                "drawer": "closed",
+                "blocks": {
+                    "red": "table",
+                    "blue": "table",
+                    "pink": "table"
+                }
+            },
+            "seed": 10
+        },
+        "drawer_open_random": {
+            "config": "datasets/guidance_conditions/random_drawer_open/experiment.json",
+            "seed": 10
+        },
+        "button_off_fixed": {
+            "config": "datasets/guidance_conditions/fixed_button_off/experiment.json",
+            "seed": 11
+        },
+        "button_off_random_env": {
+            "config": "datasets/guidance_conditions/fixed_button_off/experiment.json",
+            "env_setup": {
+                "green_light": "on",
+                "blocks": {
+                    "red": "table",
+                    "blue": "table",
+                    "pink": "table"
+                }
+            },
+            "seed": 11
+        },
+        "button_off_random": {
+            "config": "datasets/guidance_conditions/random_button_off/experiment.json",
+            "seed": 11
+        },
+        "switch_on_fixed": {
+            "config": "datasets/guidance_conditions/fixed_switch_on/experiment.json",
+            "seed": 12
+        },
+        "switch_on_random_env": {
+            "config": "datasets/guidance_conditions/fixed_switch_on/experiment.json",
+            "env_setup": {
+                "switch": "off",
+                "blocks": {
+                    "red": "table",
+                    "blue": "table",
+                    "pink": "table"
+                }
+            },
+            "seed": 12
+        },
+        "switch_on_random": {
+            "config": "datasets/guidance_conditions/random_switch_on/experiment.json",
+            "seed": 12
+        }
+    }
+}

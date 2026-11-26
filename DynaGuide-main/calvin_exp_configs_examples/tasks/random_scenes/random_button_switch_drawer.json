@@ -1,0 +1,35 @@
+{
+    "description": "button_switch_drawer (button off, switch off, drawer open) in random scenes: the door random, all three blocks somewhere on the table, conditions rendered in 4 such scenes. See dynaguide_scripts/run_random_scenes.bat",
+    "env_setup": {
+        "drawer": "closed",
+        "switch": "on",
+        "green_light": "on"
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "steps": [
+        {
+            "name": "button_off",
+            "poses": "articulated/button_off",
+            "contrast_poses": "articulated/button_on",
+            "scale": 1,
+            "alpha": 30
+        },
+        {
+            "name": "switch_off",
+            "poses": "articulated/switch_off",
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "scale": 1,
+            "alpha": 40
+        }
+    ],
+    "random_scenes": {
+        "scenes": 4,
+        "seed": 0
+    }
+}

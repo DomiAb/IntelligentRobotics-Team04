@@ -276,13 +276,33 @@ def test_min_steps_and_relative_fallback():
 
 
 def test_oracle_switch():
-    oracle = {**SWITCH_DEFAULTS, "mode" : "oracle"}
+    oracle = {**SWITCH_DEFAULTS, "mode" : "oracle", "delay" : 0}
     guidance = fake_guidance([oracle, oracle, oracle], [None] * 3, [None] * 3)
     assert not guidance.observe(fake_obs(0), 1, oracle_steps_completed = 0)
     assert guidance.observe(fake_obs(0), 2, oracle_steps_completed = 1)
     assert guidance.observe(fake_obs(0), 3, oracle_steps_completed = 2) and guidance.current == 2
     guidance.reset()
     assert guidance.current == 0 and guidance.log()["switches"] == []
+
+
+def test_oracle_waits_delay():
+    oracle = {**SWITCH_DEFAULTS, "mode" : "oracle", "delay" : 3}
+    guidance = fake_guidance([oracle, oracle], [None] * 2, [None] * 2)
+    assert not guidance.observe(fake_obs(0), 5, oracle_steps_completed = 1) # the env sees it done here
+    assert not guidance.observe(fake_obs(0), 7, oracle_steps_completed = 1)
+    assert guidance.observe(fake_obs(0), 8, oracle_steps_completed = 1)
+    assert guidance.log()["switches"][0]["env_done"] == 5
+    assert SWITCH_DEFAULTS["delay"] == 10
+
+
+def test_done_looser_than_completed():
+    from core.calvin_behaviors import COMPLETED, DONE, detect_behaviors
+    for name in COMPLETED:
+        rising = name in ["door_left", "drawer_open", "switch_on"]
+        assert (DONE[name] <= COMPLETED[name]) if rising else (DONE[name] >= COMPLETED[name])
+    start, state = np.zeros(24), np.zeros(24)
+    start[3], state[3] = 0.088, 0.010 # the switch 89% of the way off: done now, not before
+    assert "switch_off" in detect_behaviors(start, state, np.zeros(15))
 
 
 def test_switch_settings():
@@ -330,7 +350,9 @@ def test_change_waits_until_the_score_stopped_rising():
 
 def test_change_settings():
     before = {"before_examples" : "x.hdf5"}
-    settings = switch_settings({}, {"switch" : before})
+    settings = switch_settings({}, {"switch" : before}) # patches is the default since 2026-11-26
+    assert [settings[key] for key in ["criterion", "margin", "tolerance", "patience"]] == ["patches", 0.6, 0.05, 10]
+    settings = switch_settings({"switch" : {"criterion" : "change"}}, {"switch" : before})
     assert [settings[key] for key in ["criterion", "margin", "tolerance", "patience"]] == ["change", 0.2, 0.05, 10]
     assert switch_settings({}, {})["criterion"] == "peak" and switch_settings({}, {})["margin"] == 30
     assert switch_settings({"switch" : {"margin" : 0.3}}, {"switch" : before})["margin"] == 0.3
@@ -388,7 +410,7 @@ def test_patches_score():
 def test_patches_settings():
     before = {"before_examples" : "x.hdf5"}
     settings = switch_settings({"switch" : {"criterion" : "patches"}}, {"switch" : before})
-    assert [settings[key] for key in ["criterion", "margin", "tolerance", "patience"]] == ["patches", 0.5, 0.05, 10]
+    assert [settings[key] for key in ["criterion", "margin", "tolerance", "patience"]] == ["patches", 0.6, 0.05, 10]
     release = {**before, "default_criterion" : "patches"} # what make_task.py writes for a release step
     assert switch_settings({}, {"switch" : release})["criterion"] == "patches"
     assert switch_settings({"switch" : {"criterion" : "peak"}}, {"switch" : release})["criterion"] == "peak" # a plan's variant decides

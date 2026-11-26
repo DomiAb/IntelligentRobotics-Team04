@@ -1,0 +1,20 @@
+{
+    "description": "button_off alone in random scenes: the other joints random, all three blocks somewhere on the table, and conditions rendered in 4 such scenes. See dynaguide_scripts/run_random_scenes.bat",
+    "env_setup": {
+        "green_light": "on"
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "random_scenes": {
+        "scenes": 4,
+        "seed": 0
+    },
+    "steps": [
+        {
+            "name": "button_off",
+            "poses": "articulated/button_off",
+            "scale": 1,
+            "alpha": 30
+        }
+    ]
+}

@@ -31,7 +31,7 @@ guides towards one goal step after the other and decides by itself when to move 
 
 What a step can ask for, everything it lists must be true at once for it to complete:
 - behaviors: all must happen during the step, which starts when the step before completed. A joint behavior happens when the joint was
-  on its start side at some moment of the step and reaches COMPLETED on the other side (thresholds of core/calvin_behaviors.py). So
+  on its start side at some moment of the step and reaches DONE on the other side (thresholds of core/calvin_behaviors.py). So
   drawer_open and later drawer_close both count, the drawer being open at the start of the closing step. A switch that was turned on
   too early, in the step before, has to go off and on again. Blocks count from where they were at the start of the step.
   Once seen in a step, a behavior stays seen until the step completes

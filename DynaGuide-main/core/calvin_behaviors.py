@@ -10,7 +10,7 @@ from the states and compare this to the target_behaviors / avoid_behaviors of th
 asks this file whether the goal is decided, it doesn't look at the state itself.
 
 A joint behavior counts when the joint starts on one side (ARTICULATED, the authors' segmentation thresholds of
-data_processing_calvin/calvin_to_labeled_hdf5.py) and reaches the COMPLETED value close to its resting position on the other side.
+data_processing_calvin/calvin_to_labeled_hdf5.py) and reaches the DONE value, about 87% of the way, on the other side.
 The authors' end thresholds only show that the motion got going, e.g. a drawer that is half open. ARTICULATED stays as it is,
 because the guidance conditions are cut and named with it (core/guidance_conditions.py, recombine_conditions.py).
 
@@ -35,6 +35,14 @@ ARTICULATED = [(0, 0.05, 0.25, "door_left", "door_right"),
 COMPLETED = {"door_left" : 0.26, "door_right" : 0.035,
              "drawer_open" : 0.15, "drawer_close" : 0.015,
              "switch_on" : 0.08, "switch_off" : 0.008}
+
+# where a behavior counts as done for the success of a rollout (GoalTracker, SequentialGoalTracker) and so for the oracle switch: about
+# 87% of the way between the resting positions (door 0 to 0.28, drawer 0 to 0.2, switch 0 to 0.088). Looser than COMPLETED, because
+# DynaGuide and the base policy often stop a little short of the end. COMPLETED stays for choosing the conditions and robot poses, which
+# should show the finished state. drawer_open (75%) and door_right (87.5%) were already this loose and stay as they are
+DONE = {"door_left" : 0.245, "door_right" : 0.035,
+        "drawer_open" : 0.15, "drawer_close" : 0.025,
+        "switch_on" : 0.077, "switch_off" : 0.011}
 
 BLOCKS = {"red_displace" : 6, "blue_displace" : 12, "pink_displace" : 18} # index of the block position
 LIFTS = {"red_lift" : 6, "blue_lift" : 12, "pink_lift" : 18}
@@ -113,7 +121,7 @@ def label_first_interaction(states, proprio):
 
 def detect_behaviors(reference, state, proprio, lowest = None, highest = None):
     """
-    The behaviors that state shows compared to reference: a joint that went from one side (ARTICULATED) to COMPLETED on the other,
+    The behaviors that state shows compared to reference: a joint that went from one side (ARTICULATED) to DONE on the other,
     a block that moved (displace) or rose (lift) while the robot is at it. The GoalTracker compares with the start of the episode,
     the SequentialGoalTracker of core/goal_sequence.py with the start of the current goal step.
     - lowest, highest: the lowest and highest joint values since the reference, if given. Then a joint counts if it was on the start side
@@ -122,10 +130,10 @@ def detect_behaviors(reference, state, proprio, lowest = None, highest = None):
     lowest = reference if lowest is None else lowest
     highest = reference if highest is None else highest
     detected = list()
-    for idx, low, high, rising, falling in ARTICULATED: # start beyond the authors' threshold, end at COMPLETED
-        if lowest[idx] < low and state[idx] > COMPLETED.get(rising, high):
+    for idx, low, high, rising, falling in ARTICULATED: # start beyond the authors' threshold, end at DONE
+        if lowest[idx] < low and state[idx] > DONE.get(rising, high):
             detected.append(rising)
-        if highest[idx] > high and state[idx] < COMPLETED.get(falling, low):
+        if highest[idx] > high and state[idx] < DONE.get(falling, low):
             detected.append(falling)
     for name, idx in BLOCKS.items():
         moved = np.linalg.norm(state[idx:idx + 3] - reference[idx:idx + 3])

@@ -1,0 +1,15 @@
+{
+    "description": "button_on alone, starting from the scenes of drawer_button_door where DynaGuide switched to it, arm: spawn",
+    "target_behaviors": [
+        "button_on"
+    ],
+    "env_setup": {
+        "drawer": "open",
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off"
+    },
+    "use_neg": false,
+    "pos_examples": "datasets/guidance_conditions/drawer_button_door/button_on.hdf5",
+    "reset_poses": "calvin_exp_configs_examples/spawn_test/button_on_spawn.json"
+}

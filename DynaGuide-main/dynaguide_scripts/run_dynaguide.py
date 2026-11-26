@@ -41,7 +41,7 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 # these are the core modules that create the dynaguide behavior 
 from core.dynamics_models import FinalStatePredictionDino
 from core.embedder_datasets import load_conditions
-from core.calvin_utils import condition_files, generate_reset_state
+from core.calvin_utils import articulated_binaries_from_start_state, condition_files, generate_reset_state
 from core.calvin_behaviors import make_tracker, validate_experiment_config, summarize_behaviors
 from core.dynaguide import DEVICE, calculate_classifier_guidance, calculate_position_guidance
 from core.goal_sequence import SequentialGoalTracker, is_multigoal, summarize_sequence, validate_multigoal_config
@@ -67,12 +67,13 @@ def prepare_output_folder(args):
         sys.exit(f"Output folder {args.output_folder} already has results, choose a new folder so they aren't overwritten: {existing}")
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    args.video_path = args.video_path or os.path.join(args.output_folder, f"{timestamp}_video.mp4")
+    if not args.no_video: # without video, dynaguide_scripts/render_rollout_videos.py renders it afterwards from the rollout file
+        args.video_path = args.video_path or os.path.join(args.output_folder, f"{timestamp}_video.mp4")
     args.dataset_path = args.dataset_path or os.path.join(args.output_folder, f"{timestamp}_rollout.hdf5")
     args.json_path = args.json_path or os.path.join(args.output_folder, f"{timestamp}_log.json")
     args.dataset_obs = True # the success evaluation needs them
     for path in [args.video_path, args.dataset_path, args.json_path]:
-        if os.path.dirname(path) != "":
+        if path is not None and os.path.dirname(path) != "":
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
@@ -169,7 +170,8 @@ def visualize_guidance_process(model, actions_list, obs, target_embeddings, alph
 
 def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=False, camera_names=None,
             classifier_grad = None, reset_state = None, model = None, exp_dir = None, rollout_count = None, good_embeddings = None, bad_embeddings = None,
-            setup_config = None, save_frames = False, goal_dir = None, ss = 4, alpha = 20, initial_positions = None, no_collage = False, keep_images = False):
+            setup_config = None, save_frames = False, goal_dir = None, ss = 4, alpha = 20, initial_positions = None, no_collage = False, keep_images = False,
+            start_scenes = None):
     """
     This is the main function that runs DynaGuide. Notable arguments:
     - classifier_grad: the dynaguide function returned by calculate_classifier_guidance 
@@ -200,7 +202,12 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
     # this is for calvin envrionment     
     special_state, articulated_binaries = generate_reset_state(sim_hold = setup_config["env_setup"]) # and keep the switch off 
 
-    if initial_positions is not None:
+    if start_scenes is not None: # a reset_poses file with scene_states: episode i starts from scene i and robot pose i, exactly
+        k = rollout_count % len(start_scenes)
+        special_state = start_scenes[k].copy()
+        articulated_binaries = articulated_binaries_from_start_state(special_state)
+        state_to_reset = {"scene" : special_state, "robot" : initial_positions[k]}
+    elif initial_positions is not None:
         state_to_reset = {"scene" : special_state, "robot" : random.choice(initial_positions)}
     else:
         state_to_reset = special_state 
@@ -462,10 +469,15 @@ def run_trained_agent(args):
                                                         device = DEVICE)
     
     robot_initial_positions = None  
+    start_scenes = None
     if exp_setup_config.get("reset_poses") is not None: 
         with open(exp_setup_config["reset_poses"], "r") as f: # for button and door right 
             poses = json.load(f) 
             robot_initial_positions = [np.array(k) for k in poses["robot_states"]]
+            if "scene_states" in poses: # paired starts, see rollout()
+                start_scenes = [np.array(k, dtype = np.float64) for k in poses["scene_states"]]
+                if len(start_scenes) != len(robot_initial_positions):
+                    raise ValueError(f"{exp_setup_config['reset_poses']}: {len(start_scenes)} scene_states but {len(robot_initial_positions)} robot_states")
 
     with open(args.output_folder + "/args.json", "w") as f:
         json.dump(vars(args), f) # tracks everything that runs this program 
@@ -549,6 +561,7 @@ def run_trained_agent(args):
                 goal_dir = args.goal_dir,
                 ss = args.ss,
                 initial_positions = robot_initial_positions,
+                start_scenes = start_scenes,
                 no_collage = args.no_collage,
                 keep_images = args.dataset_images
             )
@@ -709,6 +722,12 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="(optional) render rollouts to this video file path",
+    )
+
+    parser.add_argument(
+        "--no_video",
+        action='store_true',
+        help="no video, faster. dynaguide_scripts/render_rollout_videos.py renders it afterwards from the saved states",
     )
 
     # How often to write video frames during the rollout

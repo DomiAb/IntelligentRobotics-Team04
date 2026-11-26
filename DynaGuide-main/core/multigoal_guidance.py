@@ -11,9 +11,10 @@ for the design, the calibration of the switch, and the tests.
 The switch, set by "switch" in the experiment config (for all steps) and in each goal step (overrides it for that step):
 
     mode            "latent" (default): DynaGuide decides from its own embedding of the camera image, see below
-                    "oracle": moves on when the SequentialGoalTracker of the env sees the step done. For comparison only, the robot
-                    doesn't know the simulator state. With the oracle, a failure is the guidance's fault, not the switch's
-    criterion       "change" (default for a step with before_examples): asks whether the object changed as in the conditions. before_examples
+                    "oracle": moves on delay env steps after the SequentialGoalTracker of the env sees the step done. For comparison
+                    only, the robot doesn't know the simulator state. With the oracle, a failure is the guidance's fault, not the switch's
+    criterion       "patches" (default for a step with before_examples since 2026-11-26), see below
+                    "change": asks whether the object changed as in the conditions. before_examples
                     show the same scene with the same robot as each goal condition, but with the step's change not done yet: drawer still
                     closed, LED still off. The difference of the two images is the change, and the score says how much of it the current
                     image shows: -1 as before, +1 as in the goal condition (change_score below). The arm is the same in both images, so
@@ -24,7 +25,8 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
                     "patches" (needs before_examples too): the same score, but only on the patches the step changes, those that differ
                     between a goal condition and its before_example by more than changed (0.3) times the strongest one. The best
                     fitting pair counts, not the average: for a block that is let go, one condition with the right place is enough.
-                    Done as with change, with the margin 0.5. For a release step make_task.py writes goal_examples (the block at a grid
+                    Done as with change, with the margin 0.6 (0.5 until 2026-11-26: 14% false switches on recorded release rollouts,
+                    0.6 one in 278, joints alike from 0.5 to 0.7). For a release step make_task.py writes goal_examples (the block at a grid
                     of places) and before_examples (the same without the block) for the switch alone, the guidance keeps its own
                     conditions, and default_criterion patches: what the step uses when no criterion is given
                     "peak" (default for a step without before_examples): the older switch, on the whole image. Uses the contrast score
@@ -40,7 +42,7 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
                     "threshold": d_goal < threshold, in the units of the embedding (L2 of the flattened patches)
                     A step without before_examples uses "peak" instead of "change" and "patches", without contrast conditions either (the first step)
                     "relative" instead of "peak" and "contrast"
-    margin, tolerance, patience     see the criteria. Defaults for change: 0.2, 0.05 and 10, for patches: 0.5, 0.05 and 10, for the
+    margin, tolerance, patience     see the criteria. Defaults for change: 0.2, 0.05 and 10, for patches: 0.6, 0.05 and 10, for the
                     others: 30, 5 and 5 (margin and tolerance in the units of the embedding)
     changed         for patches: how strongly a patch must change to count, as a part of the strongest one (default 0.3)
     ratio, threshold    the numbers of relative and threshold
@@ -49,6 +51,8 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
                               Both are encoder outputs of real images, no prediction error, and they don't depend on the action
                     predicted: the dynamics model's prediction for the current image with the last action held, against the
                               condition embeddings the guidance uses
+    delay           for the oracle: env steps it keeps guiding to the old step after the env saw it done (default 10), so a joint that is
+                    still moving gets to its end. The latent switches wait about as long (patience 10). Runs before 2026-11-26 had 0
     min_steps       env steps a step is guided at least, before the switch is checked (default 10)
     check_every     check every this many env steps (default 1)
     replan_on_switch    throw away the queued actions of the old goal and plan with the new one right away (default true)
@@ -61,9 +65,10 @@ The numbers behind the defaults are in the notebook.
 """
 
 SWITCH_DEFAULTS = {"mode" : "latent", "embedding" : "observed", "criterion" : "peak", "margin" : 30.0, "tolerance" : 5.0, "ratio" : 1.0,
-                   "threshold" : None, "patience" : 5, "min_steps" : 10, "check_every" : 1, "replan_on_switch" : True, "changed" : 0.3}
+                   "threshold" : None, "patience" : 5, "min_steps" : 10, "check_every" : 1, "replan_on_switch" : True, "changed" : 0.3,
+                   "delay" : 10}
 CHANGE_DEFAULTS = {"criterion" : "change", "margin" : 0.2, "tolerance" : 0.05, "patience" : 10} # what differs for the change criterion
-PATCHES_DEFAULTS = {"criterion" : "patches", "margin" : 0.5, "tolerance" : 0.05, "patience" : 10} # the same for the patches criterion
+PATCHES_DEFAULTS = {"criterion" : "patches", "margin" : 0.6, "tolerance" : 0.05, "patience" : 10} # the same for the patches criterion
 PAIR_DEFAULTS = {"change" : CHANGE_DEFAULTS, "patches" : PATCHES_DEFAULTS} # the criteria that compare with the before_examples
 CRITERION_NUMBERS = ["margin", "tolerance", "patience"] # mean something else for these than for the others
 PATCH_DIM = 384 # numbers per DINO patch, the embeddings are the patches one after the other
@@ -81,7 +86,7 @@ def switch_settings(config, step_entry):
             raise ValueError(f"Unknown switch settings {unknown}, choose from {SWITCH_KEYS}")
         given.update(source)
     has_before = given.get("before_examples") is not None
-    criterion = given.get("criterion", given.get("default_criterion", "change") if has_before and given.get("embedding", "observed") == "observed" else "peak")
+    criterion = given.get("criterion", given.get("default_criterion", "patches") if has_before and given.get("embedding", "observed") == "observed" else "peak")
     if criterion not in CRITERIA:
         raise ValueError(f"switch criterion must be one of {CRITERIA}, got {criterion}")
     if criterion in PAIR_DEFAULTS and not has_before:
@@ -367,6 +372,7 @@ class MultiGoalGuidance:
         self.step_start = 0
         self.switches = list()
         self.trace = list() # (t, step, score, d_goal, d_contrast) of every check, the score as GoalStepGuidance.check
+        self.oracle_seen = None # env step at which the oracle saw the current step done
         for step in self.steps:
             if step.criterion is not None:
                 step.criterion.reset()
@@ -405,8 +411,11 @@ class MultiGoalGuidance:
         switch = self.step.switch
         if switch["mode"] == "oracle":
             if oracle_steps_completed is not None and oracle_steps_completed > self.current:
-                self._move_on(t, {"reason" : "oracle"})
-                return True
+                if self.oracle_seen is None:
+                    self.oracle_seen = t
+                if t - self.oracle_seen >= switch["delay"]:
+                    self._move_on(t, {"reason" : "oracle", "env_done" : self.oracle_seen})
+                    return True
             return False
 
         if t - self.step_start < switch["min_steps"] or t % switch["check_every"] != 0:
@@ -423,6 +432,7 @@ class MultiGoalGuidance:
         print(f"DynaGuide moves on at step {t}: {self.step.name} -> {self.steps[self.current + 1].name} ({info['reason']})")
         self.current += 1
         self.step_start = t
+        self.oracle_seen = None
 
     def log(self):
         """What run_dynaguide.py writes about the switching of this episode."""

@@ -6,12 +6,13 @@ import os
 import random
 import sys
 
+import h5py
 import numpy as np
 
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) # DynaGuide-main, for core
 
-from core.calvin_utils import BLOCK_INDEX, PLACES, STATE_WORDS, generate_reset_state, parse_block
+from core.calvin_utils import BLOCK_INDEX, PLACES, STATE_WORDS, generate_reset_state, parse_block, sample_block_poses
 from core.goal_sequence import STEP_KEYS, validate_multigoal_config
 from core.guidance_conditions import TABLE_THIRDS, save_preview
 from recombine_conditions import DEFAULT_ENV_CONFIG, GOALS, STATE_INDEX, Simulator, joint_word, make_env
@@ -47,6 +48,8 @@ The task file:
     "max"          at most this many conditions per step (optional, spread over the poses). The guidance sums over the conditions, so
                    steps with very different counts pull differently hard
     "avoid_behaviors", "on_avoid", "switch"   copied into the experiment config
+    "random_scenes"  optional, {"scenes" : 4, "seed" : 0}: a task for a random scene, see make_random_task below. Then env_setup only fixes
+                   what the task needs, every joint left out is random at each reset and every block lies somewhere on the table
     "steps"        the goal steps in order, each with
         "name"
         "poses"          the base set: "articulated/drawer_open", "blocks/grip_table/grip_right", "blocks/release_drawer", ...
@@ -73,7 +76,9 @@ would be inside something, or a drawer pose's drawer is more than 2 cm off the s
 
 POSES_ROOT = os.path.join("datasets", "robot_poses")
 OUTPUT_ROOT = os.path.join("datasets", "guidance_conditions")
-TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_behaviors", "on_avoid", "switch", "steps"}
+TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_behaviors", "on_avoid", "switch", "steps", "random_scenes"}
+RANDOM_BLOCK_PLACE = "table" # where the blocks lie in a random scene, at rollouts and in the conditions
+RANDOM_TRIES = 20 # random scenes tried per wanted scene, a scene where a step keeps no condition is drawn again
 STEP_EXTRA_KEYS = {"poses", "near", "max", "block_after", "contrast_poses"}
 GOAL_KEYS = {"behaviors", "where", "any_behaviors"}
 MAX_DRAWER_SHIFT = 0.02
@@ -438,13 +443,102 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
     return config
 
 
+def random_env_setup(task, rng):
+    """One random scene as a fixed env_setup: the task's joints, the others at a random end, every block at a random place on the table."""
+    env_setup = {key : value for key, value in task["env_setup"].items() if key != "blocks"}
+    for joint in JOINTS:
+        if joint not in env_setup:
+            env_setup[joint] = rng.choice(sorted(STATE_WORDS[joint]))
+    drawer = STATE_WORDS["drawer"][env_setup["drawer"]] if isinstance(env_setup["drawer"], str) else env_setup["drawer"]
+    poses = sample_block_poses({color : RANDOM_BLOCK_PLACE for color in BLOCK_INDEX}, drawer, rng = rng)
+    env_setup["blocks"] = {color : {"pos" : [round(float(x), 5) for x in poses[index - 6 : index - 3]], "yaw" : round(float(poses[index - 1]), 5)}
+                           for color, index in BLOCK_INDEX.items()}
+    return env_setup
+
+
+def merge_conditions(paths, output):
+    """Writes the conditions of several files into one, in the order given, so condition k of a merged file and its twin stay pairs."""
+    with h5py.File(output, "w") as merged:
+        data, number = merged.create_group("data"), 0
+        for path in paths:
+            with h5py.File(path, "r") as source:
+                for key, value in source["data"].attrs.items():
+                    if key != "total":
+                        data.attrs[key] = value
+                for demo in sorted(source["data"].keys(), key = lambda name: int(name.split("_")[-1])):
+                    source.copy(source["data"][demo], data, name = f"demo_{number}")
+                    number += 1
+        data.attrs["total"] = sum(int(data[demo].attrs.get("num_samples", 1)) for demo in data.keys())
+
+
+def make_random_task(task, task_name, sim, root = POSES_ROOT, output = None):
+    """
+    A task for random scenes: the joints env_setup leaves out are random at each reset, and every block lies at a random place on the
+    table. The conditions show such scenes too: the task is made scenes times (random_scenes), each time in its own random scene, with
+    max / scenes conditions per step, and the files of each step are merged. Each scene is in scene_<n>/ with its manifest and previews.
+    The switch's twins are rendered in the scene of their condition, so the pairs only differ by the step's change. A grip or release
+    step needs its block at a fixed place, so only articulated steps can be made this way.
+    """
+    settings = task["random_scenes"]
+    scenes, seed = settings.get("scenes", 4), settings.get("seed", 0)
+    if task.get("block") is not None:
+        raise TaskError("random_scenes is for articulated steps, a block task needs its block at a fixed place")
+    output = output or os.path.join(OUTPUT_ROOT, task_name)
+    if os.path.isdir(output) and len(os.listdir(output)) > 0:
+        raise TaskError(f"{output} is not empty. Delete it to make the task again")
+    per_scene = int(np.ceil(task.get("max", 12) / scenes))
+    rng, configs, setups = random.Random(seed), list(), list()
+    for number in range(scenes):
+        for attempt in range(RANDOM_TRIES):
+            env_setup = random_env_setup(task, rng)
+            scene_task = {key : value for key, value in task.items() if key != "random_scenes"}
+            scene_task.update(env_setup = env_setup, max = per_scene)
+            folder = os.path.join(output, f"scene_{number}")
+            try:
+                configs.append(make_task(scene_task, f"{task_name}_scene_{number}", sim, root, folder))
+                setups.append(env_setup)
+                break
+            except TaskError as error:
+                if "fits" not in str(error): # "no condition fits", "no contrast condition fits"
+                    raise
+                print(f"scene {number}: {str(error).splitlines()[0]} Drawing another scene")
+                for name in os.listdir(folder):
+                    os.remove(os.path.join(folder, name))
+        else:
+            raise TaskError(f"no random scene in {RANDOM_TRIES} tries where every step keeps a condition")
+
+    config = copy.deepcopy(configs[0])
+    config["description"] = task.get("description", "")
+    config["env_setup"] = {**task["env_setup"], "blocks" : {color : RANDOM_BLOCK_PLACE for color in BLOCK_INDEX}}
+    for number, step in enumerate(config["goal_sequence"]):
+        name = step["name"]
+        step["pos_examples"] = os.path.join(output, f"{name}.hdf5")
+        merge_conditions([c["goal_sequence"][number]["pos_examples"] for c in configs], step["pos_examples"])
+        for key in ["contrast_examples", "before_examples", "goal_examples"]:
+            if key in step.get("switch", dict()):
+                step["switch"][key] = os.path.join(output, os.path.basename(configs[0]["goal_sequence"][number]["switch"][key]))
+                merge_conditions([c["goal_sequence"][number]["switch"][key] for c in configs], step["switch"][key])
+        with h5py.File(step["pos_examples"], "r") as f:
+            print(f"{name:32s} {len(f['data'])} conditions over {scenes} random scenes")
+    validate_multigoal_config(copy.deepcopy(config))
+    with open(os.path.join(output, "experiment.json"), "w") as f:
+        json.dump(config, f, indent = 4)
+    with open(os.path.join(output, "manifest.json"), "w") as f:
+        json.dump({"task" : task, "scenes" : setups}, f, indent = 4)
+    print(f"Saved to {output}: the merged conditions and experiment.json, each scene in scene_<n>/")
+    return config
+
+
 def main(args):
     with open(args.task, "r") as f:
         task = json.load(f)
     name = os.path.splitext(os.path.basename(args.task))[0]
     sim = Simulator(make_env(args.env_config))
     try:
-        make_task(task, name, sim, args.poses_root, args.output_folder)
+        if "random_scenes" in task:
+            make_random_task(task, name, sim, args.poses_root, args.output_folder)
+        else:
+            make_task(task, name, sim, args.poses_root, args.output_folder)
     except TaskError as error:
         sys.exit(f"{args.task}: {error}")
 

@@ -1,0 +1,21 @@
+{
+    "description": "The spawn test for door_right of drawer_button_door: the same 50 scenes where DynaGuide switched to the step, the arm where the chain left it (chain_start) or at a spawn pose (spawn). One rollout per scene. Made with dynaguide_scripts/make_spawn_test.py, run with dynaguide_scripts/run_spawn_test.bat",
+    "n_rollouts": 50,
+    "horizon": 400,
+    "scale": 2,
+    "ss": 4,
+    "alpha": 15,
+    "base_policy": false,
+    "keep_images": false,
+    "video": false,
+    "experiments": {
+        "door_right_chain_start": {
+            "config": "calvin_exp_configs_examples/spawn_test/door_right_chain_start_config.json",
+            "seed": 0
+        },
+        "door_right_spawn": {
+            "config": "calvin_exp_configs_examples/spawn_test/door_right_spawn_config.json",
+            "seed": 0
+        }
+    }
+}

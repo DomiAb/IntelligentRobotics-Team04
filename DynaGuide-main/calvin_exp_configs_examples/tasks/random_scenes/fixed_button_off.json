@@ -1,0 +1,24 @@
+{
+    "description": "button_off alone in the fixed scene of the chain tests, no blocks. Reference for the random scene test, see dynaguide_scripts/run_random_scenes.bat",
+    "env_setup": {
+        "drawer": "closed",
+        "sliding_door": "left",
+        "switch": "on",
+        "green_light": "on",
+        "blocks": {
+            "red": "hidden",
+            "blue": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "steps": [
+        {
+            "name": "button_off",
+            "poses": "articulated/button_off",
+            "scale": 1,
+            "alpha": 30
+        }
+    ]
+}

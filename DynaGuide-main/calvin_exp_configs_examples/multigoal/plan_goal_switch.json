@@ -12,7 +12,7 @@
         "drawer_button_door": {
             "config": "datasets/guidance_conditions/drawer_button_door/experiment.json",
             "switch_variants": {
-                "change": {},
+                "change": {"criterion": "change"},
                 "oracle": {
                     "mode": "oracle"
                 }
@@ -22,7 +22,7 @@
         "door_drawer_switch": {
             "config": "datasets/guidance_conditions/door_drawer_switch/experiment.json",
             "switch_variants": {
-                "change": {},
+                "change": {"criterion": "change"},
                 "oracle": {
                     "mode": "oracle"
                 }
@@ -32,7 +32,7 @@
         "button_switch_drawer": {
             "config": "datasets/guidance_conditions/button_switch_drawer/experiment.json",
             "switch_variants": {
-                "change": {},
+                "change": {"criterion": "change"},
                 "oracle": {
                     "mode": "oracle"
                 }
@@ -42,7 +42,7 @@
         "door_switch_button": {
             "config": "datasets/guidance_conditions/door_switch_button/experiment.json",
             "switch_variants": {
-                "change": {},
+                "change": {"criterion": "change"},
                 "oracle": {
                     "mode": "oracle"
                 }
