@@ -1,0 +1,34 @@
+{
+    "description": "Turn the switch on, press the button (green LED off), open the drawer. The same behaviors as button_drawer_switch in another order; the drawer stays closed until the end. Random scenes: the joints the task doesn't fix are random at each reset, the blocks lie somewhere on the table, the conditions are rendered in 4 random scenes. Long runs, see dynaguide_scripts/run_long_runs_1.bat and run_long_runs_2.bat. Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "switch": "off",
+        "green_light": "on",
+        "drawer": "closed"
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "random_scenes": {
+        "scenes": 4,
+        "seed": 0
+    },
+    "steps": [
+        {
+            "name": "switch_on",
+            "poses": "articulated/switch_on",
+            "scale": 1.5,
+            "alpha": 30
+        },
+        {
+            "name": "button_off",
+            "poses": "articulated/button_off",
+            "scale": 1,
+            "alpha": 30
+        },
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}

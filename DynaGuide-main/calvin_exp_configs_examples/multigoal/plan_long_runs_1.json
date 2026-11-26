@@ -1,0 +1,64 @@
+{
+    "description": "Long runs, part 1 of 2: button_drawer_switch and switch_button_drawer in random scenes, 5 x 100 guided rollouts each (seeds 0 to 4) and 100 of the base policy (seed 0), up to 800 steps, no video. The goal switch is the default (patches, margin 0.6). Run with dynaguide_scripts/run_long_runs_1.bat",
+    "n_rollouts": 100,
+    "horizon": 800,
+    "scale": 1,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "video": false,
+    "video_skip": 4,
+    "experiments": {
+        "button_drawer_switch_seed0": {
+            "config": "datasets/guidance_conditions/long_button_drawer_switch/experiment.json",
+            "seed": 200,
+            "base_policy": true
+        },
+        "button_drawer_switch_seed1": {
+            "config": "datasets/guidance_conditions/long_button_drawer_switch/experiment.json",
+            "seed": 201,
+            "base_policy": false
+        },
+        "button_drawer_switch_seed2": {
+            "config": "datasets/guidance_conditions/long_button_drawer_switch/experiment.json",
+            "seed": 202,
+            "base_policy": false
+        },
+        "button_drawer_switch_seed3": {
+            "config": "datasets/guidance_conditions/long_button_drawer_switch/experiment.json",
+            "seed": 203,
+            "base_policy": false
+        },
+        "button_drawer_switch_seed4": {
+            "config": "datasets/guidance_conditions/long_button_drawer_switch/experiment.json",
+            "seed": 204,
+            "base_policy": false
+        },
+        "switch_button_drawer_seed0": {
+            "config": "datasets/guidance_conditions/long_switch_button_drawer/experiment.json",
+            "seed": 300,
+            "base_policy": true
+        },
+        "switch_button_drawer_seed1": {
+            "config": "datasets/guidance_conditions/long_switch_button_drawer/experiment.json",
+            "seed": 301,
+            "base_policy": false
+        },
+        "switch_button_drawer_seed2": {
+            "config": "datasets/guidance_conditions/long_switch_button_drawer/experiment.json",
+            "seed": 302,
+            "base_policy": false
+        },
+        "switch_button_drawer_seed3": {
+            "config": "datasets/guidance_conditions/long_switch_button_drawer/experiment.json",
+            "seed": 303,
+            "base_policy": false
+        },
+        "switch_button_drawer_seed4": {
+            "config": "datasets/guidance_conditions/long_switch_button_drawer/experiment.json",
+            "seed": 304,
+            "base_policy": false
+        }
+    }
+}

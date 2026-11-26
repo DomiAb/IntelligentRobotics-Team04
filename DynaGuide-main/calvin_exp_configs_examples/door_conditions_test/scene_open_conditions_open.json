@@ -1,0 +1,15 @@
+{
+    "description": "door_right alone, drawer open in the scene, conditions rendered with the drawer open",
+    "target_behaviors": [
+        "door_right"
+    ],
+    "env_setup": {
+        "drawer": "open",
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "on"
+    },
+    "use_neg": false,
+    "pos_examples": "datasets/guidance_conditions/drawer_button_door/door_right.hdf5",
+    "reset_poses": "calvin_exp_configs_examples/spawn_test/door_right_spawn.json"
+}

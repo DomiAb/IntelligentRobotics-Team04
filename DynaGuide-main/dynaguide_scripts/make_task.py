@@ -49,7 +49,7 @@ The task file:
                    steps with very different counts pull differently hard
     "avoid_behaviors", "on_avoid", "switch"   copied into the experiment config
     "random_scenes"  optional, {"scenes" : 4, "seed" : 0}: a task for a random scene, see make_random_task below. Then env_setup only fixes
-                   what the task needs, every joint left out is random at each reset and every block lies somewhere on the table
+                   what the task needs, every joint left out is random at each reset and every block left out lies somewhere on the table
     "steps"        the goal steps in order, each with
         "name"
         "poses"          the base set: "articulated/drawer_open", "blocks/grip_table/grip_right", "blocks/release_drawer", ...
@@ -63,6 +63,9 @@ The task file:
                          area (drawer_center, table_right, cabinet_left_center, ...)
         "contrast_poses" a base set rendered in the scene before this step, as the switch's contrast. Steps after the first don't need
                          it, they contrast with the step before
+        "home"           {"poses" : reset_poses file, "count" : 12, "steps" : 40, "scale" : 1.5, "alpha" : 30}: a home phase before the
+                         step. <step>_home.hdf5 shows the scene before the step with the arm at count spawn poses of the file, and the
+                         guidance pulls there for the first steps env steps of the step, see core/multigoal_guidance.py
 
 The story, step by step:
 - an articulated step moves its joint to the goal: its conditions show the pose's own joint value, later steps show the median of them
@@ -79,7 +82,8 @@ OUTPUT_ROOT = os.path.join("datasets", "guidance_conditions")
 TASK_KEYS = {"description", "env_setup", "reset_poses", "block", "max", "avoid_behaviors", "on_avoid", "switch", "steps", "random_scenes"}
 RANDOM_BLOCK_PLACE = "table" # where the blocks lie in a random scene, at rollouts and in the conditions
 RANDOM_TRIES = 20 # random scenes tried per wanted scene, a scene where a step keeps no condition is drawn again
-STEP_EXTRA_KEYS = {"poses", "near", "max", "block_after", "contrast_poses"}
+STEP_EXTRA_KEYS = {"poses", "near", "max", "block_after", "contrast_poses", "home"}
+HOME_DEFAULTS = {"count" : 12, "steps" : 40, "scale" : 1.5, "alpha" : 30, "seed" : 0}
 GOAL_KEYS = {"behaviors", "where", "any_behaviors"}
 MAX_DRAWER_SHIFT = 0.02
 GRID_SPACING = 0.03 # meters between the places of <step>_switch.hdf5
@@ -251,6 +255,21 @@ def render_before(sim, story, pose_set, rendered, block):
         before[4] = float(before[STATE_INDEX["switch"]] > sim.switch_threshold) # the lightbulb follows the switch
         twins.append((sim.render(), before, pose))
     return twins
+
+
+def render_home(sim, story, spec):
+    """The scene of the story with the arm at spawn poses: the home examples of a step."""
+    with open(spec["poses"]) as f:
+        robots = json.load(f)["robot_states"]
+    chosen = random.Random(spec["seed"]).sample(range(len(robots)), min(spec["count"], len(robots)))
+    rendered = list()
+    for number in chosen:
+        state, proprio = story.state.copy(), np.array(robots[number], dtype = np.float64)
+        state[4] = float(state[STATE_INDEX["switch"]] > sim.switch_threshold) # the lightbulb follows the switch
+        sim.set(state, proprio)
+        pose = {"attrs" : {"source" : f"{spec['poses']}:{number}"}, "file" : spec["poses"], "proprio" : proprio, "action" : np.zeros(7)}
+        rendered.append((sim.render(), state, pose))
+    return rendered
 
 
 def place_grid(pose_set, drawer):
@@ -428,6 +447,14 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
             step["switch"] = {**step.get("switch", dict()), "before_examples" : before_file}
             if pose_set.kind == "blocks": # the block can lie anywhere in the area, only the patches criterion can deal with that
                 step["switch"].setdefault("default_criterion", "patches")
+        if "home" in entry: # rendered in the scene before the step
+            spec = {**HOME_DEFAULTS, **entry["home"]}
+            home = render_home(sim, story, spec)
+            home_file = os.path.join(output, f"{name}_home.hdf5")
+            segments = write_rendered(home_file, home, f"{name}_home")
+            save_preview(home_file[:-5] + ".png", segments)
+            rows.append((f"{name} home | {scene}", [images["third_person"] for images, _, _ in home]))
+            step["home"] = {"examples" : home_file, "steps" : spec["steps"], "scale" : spec["scale"], "alpha" : spec["alpha"]}
         config["goal_sequence"].append(step)
         advance(story, pose_set, rendered, entry)
 
@@ -444,14 +471,19 @@ def make_task(task, task_name, sim, root = POSES_ROOT, output = None):
 
 
 def random_env_setup(task, rng):
-    """One random scene as a fixed env_setup: the task's joints, the others at a random end, every block at a random place on the table."""
+    """
+    One random scene as a fixed env_setup: the task's joints, the others at a random end, the blocks env_setup fixes (the task's block)
+    where it has them, every other block at a random place on the table.
+    """
+    fixed_blocks = task["env_setup"].get("blocks", dict())
     env_setup = {key : value for key, value in task["env_setup"].items() if key != "blocks"}
     for joint in JOINTS:
         if joint not in env_setup:
             env_setup[joint] = rng.choice(sorted(STATE_WORDS[joint]))
     drawer = STATE_WORDS["drawer"][env_setup["drawer"]] if isinstance(env_setup["drawer"], str) else env_setup["drawer"]
-    poses = sample_block_poses({color : RANDOM_BLOCK_PLACE for color in BLOCK_INDEX}, drawer, rng = rng)
-    env_setup["blocks"] = {color : {"pos" : [round(float(x), 5) for x in poses[index - 6 : index - 3]], "yaw" : round(float(poses[index - 1]), 5)}
+    poses = sample_block_poses({color : fixed_blocks.get(color, RANDOM_BLOCK_PLACE) for color in BLOCK_INDEX}, drawer, rng = rng)
+    env_setup["blocks"] = {color : fixed_blocks[color] if color in fixed_blocks else
+                           {"pos" : [round(float(x), 5) for x in poses[index - 6 : index - 3]], "yaw" : round(float(poses[index - 1]), 5)}
                            for color, index in BLOCK_INDEX.items()}
     return env_setup
 
@@ -477,12 +509,14 @@ def make_random_task(task, task_name, sim, root = POSES_ROOT, output = None):
     table. The conditions show such scenes too: the task is made scenes times (random_scenes), each time in its own random scene, with
     max / scenes conditions per step, and the files of each step are merged. Each scene is in scene_<n>/ with its manifest and previews.
     The switch's twins are rendered in the scene of their condition, so the pairs only differ by the step's change. A grip or release
-    step needs its block at a fixed place, so only articulated steps can be made this way.
+    step needs its block at a fixed place: give it as a spot with a yaw in env_setup (the task's "block"), the others are random.
     """
     settings = task["random_scenes"]
     scenes, seed = settings.get("scenes", 4), settings.get("seed", 0)
-    if task.get("block") is not None:
-        raise TaskError("random_scenes is for articulated steps, a block task needs its block at a fixed place")
+    for color, spec in task["env_setup"].get("blocks", dict()).items():
+        low, high, _, yaw = parse_block(color, spec)
+        if not np.array_equal(low, high) or yaw is None:
+            raise TaskError(f"random_scenes: block {color} in env_setup must be at a spot with a yaw (the task's block), leave the others out")
     output = output or os.path.join(OUTPUT_ROOT, task_name)
     if os.path.isdir(output) and len(os.listdir(output)) > 0:
         raise TaskError(f"{output} is not empty. Delete it to make the task again")
@@ -509,11 +543,15 @@ def make_random_task(task, task_name, sim, root = POSES_ROOT, output = None):
 
     config = copy.deepcopy(configs[0])
     config["description"] = task.get("description", "")
-    config["env_setup"] = {**task["env_setup"], "blocks" : {color : RANDOM_BLOCK_PLACE for color in BLOCK_INDEX}}
+    fixed_blocks = task["env_setup"].get("blocks", dict())
+    config["env_setup"] = {**task["env_setup"], "blocks" : {color : fixed_blocks.get(color, RANDOM_BLOCK_PLACE) for color in BLOCK_INDEX}}
     for number, step in enumerate(config["goal_sequence"]):
         name = step["name"]
         step["pos_examples"] = os.path.join(output, f"{name}.hdf5")
         merge_conditions([c["goal_sequence"][number]["pos_examples"] for c in configs], step["pos_examples"])
+        if "home" in step:
+            step["home"]["examples"] = os.path.join(output, os.path.basename(configs[0]["goal_sequence"][number]["home"]["examples"]))
+            merge_conditions([c["goal_sequence"][number]["home"]["examples"] for c in configs], step["home"]["examples"])
         for key in ["contrast_examples", "before_examples", "goal_examples"]:
             if key in step.get("switch", dict()):
                 step["switch"][key] = os.path.join(output, os.path.basename(configs[0]["goal_sequence"][number]["switch"][key]))

@@ -31,7 +31,8 @@ guides towards one goal step after the other and decides by itself when to move 
 
 What a step can ask for, everything it lists must be true at once for it to complete:
 - behaviors: all must happen during the step, which starts when the step before completed. A joint behavior happens when the joint was
-  on its start side at some moment of the step and reaches DONE on the other side (thresholds of core/calvin_behaviors.py). So
+  on its start side (at most START_SHARE, 25%, of the way moved) at some moment of the step and reaches DONE on the other side
+  (thresholds of core/calvin_behaviors.py). So
   drawer_open and later drawer_close both count, the drawer being open at the start of the closing step. A switch that was turned on
   too early, in the step before, has to go off and on again. Blocks count from where they were at the start of the step.
   Once seen in a step, a behavior stays seen until the step completes
@@ -54,11 +55,12 @@ A step needs at least one of behaviors, any_behaviors, where, blocks_moved. Late
 opened in step 1 and closed in step 3 is a success. Steps complete strictly in order, a step can't be done before the one before it.
 Several steps can complete in the same env step, if what the later one asks for already holds.
 
-pos_examples, neg_examples, scale, alpha and switch of a step are for DynaGuide and ignored here.
+pos_examples, neg_examples, scale, alpha, switch and home of a step are for DynaGuide and ignored here.
 """
 
 STEP_GOAL_KEYS = ["behaviors", "any_behaviors", "where", "blocks_moved"]
-STEP_KEYS = ["name", "description", "avoid_behaviors", "on_avoid", "max_steps", "pos_examples", "neg_examples", "use_neg", "scale", "alpha", "switch"] + STEP_GOAL_KEYS
+STEP_KEYS = ["name", "description", "avoid_behaviors", "on_avoid", "max_steps", "pos_examples", "neg_examples", "use_neg", "scale", "alpha", "switch",
+             "home"] + STEP_GOAL_KEYS
 EVENT_BEHAVIORS = [name for name in BEHAVIORS if name != "no_behavior"]
 JOINTS = ["sliding_door", "drawer", "switch", "green_light"] # in the order of ARTICULATED
 

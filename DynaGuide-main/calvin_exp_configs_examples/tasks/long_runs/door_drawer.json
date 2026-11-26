@@ -1,0 +1,27 @@
+{
+    "description": "Slide the door to the right, open the drawer. The door only works as the first step; the drawer works anywhere. Random scenes: the joints the task doesn't fix are random at each reset, the blocks lie somewhere on the table, the conditions are rendered in 4 random scenes. Long runs, see dynaguide_scripts/run_long_runs_1.bat and run_long_runs_2.bat. Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "sliding_door": "left",
+        "drawer": "closed"
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "random_scenes": {
+        "scenes": 4,
+        "seed": 0
+    },
+    "steps": [
+        {
+            "name": "door_right",
+            "poses": "articulated/door_right",
+            "scale": 2,
+            "alpha": 15
+        },
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "scale": 1,
+            "alpha": 40
+        }
+    ]
+}

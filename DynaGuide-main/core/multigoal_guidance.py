@@ -57,6 +57,10 @@ The switch, set by "switch" in the experiment config (for all steps) and in each
     check_every     check every this many env steps (default 1)
     replan_on_switch    throw away the queued actions of the old goal and plan with the new one right away (default true)
 
+A goal step can start with a home phase ("home" : {"examples" : file, "steps" : 40, "scale" : 1.5, "alpha" : 30} in the step, made by
+make_task.py): for its first steps env steps the guidance pulls towards the home examples, the step's scene with the arm at spawn
+poses, and only then towards the step's conditions. The switch isn't checked during the phase. The env doesn't know about it.
+
 d_goal and d_contrast are soft minimums over the conditions, -alpha * logsumexp(-d / alpha), with the alpha of the step. That is the
 distance the guidance itself pulls on, close to the distance of the nearest condition.
 
@@ -277,8 +281,9 @@ class SwitchCriterion:
 class GoalStepGuidance:
     """What DynaGuide holds for one goal step: its guidance function, and the embeddings to decide when the step is done."""
     def __init__(self, name, guidance, good_embeddings, bad_embeddings, alpha, switch, goal_embeddings, contrast_embeddings,
-                 before_embeddings = None):
+                 before_embeddings = None, home = None):
         self.name = name
+        self.home = home # None, or (guidance, good embeddings, steps) of the home phase
         self.guidance = guidance
         self.good_embeddings = good_embeddings # what the guidance pulls towards, also for the video collage
         self.bad_embeddings = bad_embeddings
@@ -356,7 +361,15 @@ class MultiGoalGuidance:
                     previous = steps[-1].goal_embeddings # None if the step before uses the oracle
                     contrast = previous if previous is not None and steps[-1].switch["embedding"] == switch["embedding"] else \
                         cls._switch_embeddings(model, step_inputs[number - 1]["good_dataset"], switch["embedding"], device, max_examples)
-            steps.append(GoalStepGuidance(inputs["name"], guidance, good, bad, inputs["alpha"], switch, goal, contrast, before))
+            home = None
+            if inputs.get("home") is not None:
+                spec = inputs["home"]
+                print(f"Goal step {number}: home phase of {spec['steps']} env steps first")
+                home_guidance, home_good, _ = calculate_classifier_guidance(model, good_dataset = spec["dataset"], main_camera = main_camera,
+                                                                            scale = spec["scale"], bad_dataset = None, alpha = spec["alpha"],
+                                                                            max_examples = max_examples, device = device)
+                home = (home_guidance, home_good, spec["steps"])
+            steps.append(GoalStepGuidance(inputs["name"], guidance, good, bad, inputs["alpha"], switch, goal, contrast, before, home))
         return cls(model, steps, main_camera, device, action_chunk_length)
 
     @staticmethod
@@ -373,6 +386,9 @@ class MultiGoalGuidance:
         self.switches = list()
         self.trace = list() # (t, step, score, d_goal, d_contrast) of every check, the score as GoalStepGuidance.check
         self.oracle_seen = None # env step at which the oracle saw the current step done
+        self.t = 0 # the last env step observe() saw
+        self.homing = self.steps[0].home is not None # in the home phase of the current step
+        self.replan_now = False # the home phase just ended
         for step in self.steps:
             if step.criterion is not None:
                 step.criterion.reset()
@@ -383,14 +399,22 @@ class MultiGoalGuidance:
 
     @property
     def good_embeddings(self):
-        return self.step.good_embeddings
+        return self.step.home[1] if self.homing else self.step.good_embeddings
 
     @property
     def bad_embeddings(self):
-        return self.step.bad_embeddings
+        return None if self.homing else self.step.bad_embeddings
 
     def __call__(self, states, actions):
-        return self.step.guidance(states, actions)
+        return self.step.home[0](states, actions) if self.homing else self.step.guidance(states, actions)
+
+    def _update_home(self, t):
+        """Ends the home phase of the current step after its steps. Returns True when it just ended, so the policy plans again."""
+        if self.homing and t - self.step_start >= self.step.home[2]:
+            self.homing = False
+            print(f"DynaGuide ends the home phase of {self.step.name} at step {t}")
+            return True
+        return False
 
     def _query(self, obs, last_action):
         state = observation_state(obs, self.main_camera)
@@ -404,8 +428,10 @@ class MultiGoalGuidance:
         """
         Looks at the observation after env step t and moves on to the next goal step if the current one is done.
         - oracle_steps_completed: how many steps the env saw done, used by the oracle switch
-        Returns True if it moved on, so the caller can make the policy plan again.
+        Returns True if it moved on, so the caller can make the policy plan again (see also replan_now).
         """
+        self.t = t
+        self.replan_now = self._update_home(t)
         if self.current >= len(self.steps) - 1: # the last step is guided until the env ends the episode
             return False
         switch = self.step.switch
@@ -418,7 +444,8 @@ class MultiGoalGuidance:
                     return True
             return False
 
-        if t - self.step_start < switch["min_steps"] or t % switch["check_every"] != 0:
+        home_steps = self.step.home[2] if self.step.home is not None else 0
+        if t - self.step_start < home_steps + switch["min_steps"] or t % switch["check_every"] != 0:
             return False
         done, score, d_goal, d_contrast = self.step.check(self._query(obs, last_action))
         self.trace.append((t, self.current, score, d_goal, d_contrast))
@@ -433,6 +460,7 @@ class MultiGoalGuidance:
         self.current += 1
         self.step_start = t
         self.oracle_seen = None
+        self.homing = self.step.home is not None
 
     def log(self):
         """What run_dynaguide.py writes about the switching of this episode."""

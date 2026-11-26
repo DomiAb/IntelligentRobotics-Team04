@@ -304,6 +304,8 @@ def rollout(policy, env, horizon, video_writer=None, video_skip=5, return_obs=Fa
                 moved_on = classifier_grad.observe(next_obs, step_i + 1, last_action = act, oracle_steps_completed = goal_tracker.steps_completed)
                 if moved_on and classifier_grad.steps[classifier_grad.current - 1].switch["replan_on_switch"]:
                     policy.policy.action_queue.clear()
+                elif classifier_grad.replan_now: # the home phase ended, plan towards the step's conditions right away
+                    policy.policy.action_queue.clear()
             if multigoal:
                 names = [step.name for step in goal_tracker.steps]
                 video_label = f"guiding: {classifier_grad.step.name} | env done: {goal_tracker.steps_completed}/{len(names)}"
@@ -460,7 +462,8 @@ def run_trained_agent(args):
                                 "contrast_dataset" : conditions(switch["contrast_examples"]) if switch.get("contrast_examples") is not None else None,
                                 "before_dataset" : conditions(switch["before_examples"]) if switch.get("before_examples") is not None else None,
                                 "goal_dataset" : conditions(switch["goal_examples"]) if switch.get("goal_examples") is not None else None,
-                                "scale" : entry.get("scale", args.scale), "alpha" : entry.get("alpha", args.alpha), "switch" : switch})
+                                "scale" : entry.get("scale", args.scale), "alpha" : entry.get("alpha", args.alpha), "switch" : switch,
+                                "home" : None if entry.get("home") is None else {**entry["home"], "dataset" : conditions(entry["home"]["examples"])}})
         classifier_grad = MultiGoalGuidance.build(model, step_inputs, MAIN_CAMERA, DEVICE, max_examples = args.max_examples,
                                                   action_chunk_length = ACTION_CHUNK_LENGTH)
         good_embeddings, bad_embeddings = classifier_grad.good_embeddings, classifier_grad.bad_embeddings

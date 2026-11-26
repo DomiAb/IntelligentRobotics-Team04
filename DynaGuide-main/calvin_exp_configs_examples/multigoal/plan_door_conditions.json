@@ -1,0 +1,30 @@
+{
+    "description": "The door conditions test: door_right alone from the 50 scenes of the spawn test (after the button step of drawer_button_door, arm at a spawn pose). The drawer open or closed in the scene, times conditions rendered with the drawer open (drawer_button_door) or closed (door_switch_button, the same robot poses). In the spawn test open scene with open conditions did 4 of 50; as the first step of door_switch_button (closed, closed) the door did 25% in 400 steps. Run with dynaguide_scripts/run_homing_door_tests.bat",
+    "n_rollouts": 50,
+    "horizon": 400,
+    "scale": 2,
+    "ss": 4,
+    "alpha": 15,
+    "base_policy": false,
+    "keep_images": false,
+    "video": false,
+    "video_skip": 4,
+    "experiments": {
+        "scene_open_conditions_open": {
+            "config": "calvin_exp_configs_examples/door_conditions_test/scene_open_conditions_open.json",
+            "seed": 800
+        },
+        "scene_open_conditions_closed": {
+            "config": "calvin_exp_configs_examples/door_conditions_test/scene_open_conditions_closed.json",
+            "seed": 800
+        },
+        "scene_closed_conditions_open": {
+            "config": "calvin_exp_configs_examples/door_conditions_test/scene_closed_conditions_open.json",
+            "seed": 800
+        },
+        "scene_closed_conditions_closed": {
+            "config": "calvin_exp_configs_examples/door_conditions_test/scene_closed_conditions_closed.json",
+            "seed": 800
+        }
+    }
+}

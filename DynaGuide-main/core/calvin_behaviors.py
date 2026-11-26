@@ -44,6 +44,20 @@ DONE = {"door_left" : 0.245, "door_right" : 0.035,
         "drawer_open" : 0.15, "drawer_close" : 0.025,
         "switch_on" : 0.077, "switch_off" : 0.011}
 
+# a joint behavior also counts when the joint had already moved up to this part of the way when it was last on its start side, e.g. a
+# switch pushed a little during the step before. The authors' ARTICULATED thresholds stay where they are looser (the drawer closing)
+START_SHARE = 0.25
+JOINT_RANGE = {0 : (0.0, 0.28), 1 : (0.0, 0.2), 3 : (0.0, 0.088)} # state index: resting ends of the door, drawer and switch
+
+
+def start_sides(idx, low, high):
+    """Below the first number the joint is on the start side of the rising behavior, above the second on that of the falling one."""
+    if idx not in JOINT_RANGE:
+        return low, high
+    lo, hi = JOINT_RANGE[idx]
+    return max(low, lo + START_SHARE * (hi - lo)), min(high, hi - START_SHARE * (hi - lo))
+
+
 BLOCKS = {"red_displace" : 6, "blue_displace" : 12, "pink_displace" : 18} # index of the block position
 LIFTS = {"red_lift" : 6, "blue_lift" : 12, "pink_lift" : 18}
 ON_AVOID = ["end", "record"] # what a config's on_avoid can be: end the rollout when something to avoid happens, or only record it
@@ -130,10 +144,11 @@ def detect_behaviors(reference, state, proprio, lowest = None, highest = None):
     lowest = reference if lowest is None else lowest
     highest = reference if highest is None else highest
     detected = list()
-    for idx, low, high, rising, falling in ARTICULATED: # start beyond the authors' threshold, end at DONE
-        if lowest[idx] < low and state[idx] > DONE.get(rising, high):
+    for idx, low, high, rising, falling in ARTICULATED: # start within START_SHARE of the start end (or beyond the authors' threshold), end at DONE
+        start_low, start_high = start_sides(idx, low, high)
+        if lowest[idx] < start_low and state[idx] > DONE.get(rising, high):
             detected.append(rising)
-        if highest[idx] > high and state[idx] < DONE.get(falling, low):
+        if highest[idx] > start_high and state[idx] < DONE.get(falling, low):
             detected.append(falling)
     for name, idx in BLOCKS.items():
         moved = np.linalg.norm(state[idx:idx + 3] - reference[idx:idx + 3])

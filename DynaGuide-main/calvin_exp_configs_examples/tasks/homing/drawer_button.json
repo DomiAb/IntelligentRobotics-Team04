@@ -1,0 +1,35 @@
+{
+    "description": "Open the drawer, press the button (green LED on): the first two steps of drawer_button_door, in its fixed scene. The homing test, see dynaguide_scripts/run_homing_door_tests.bat. Make it with dynaguide_scripts/make_task.py",
+    "env_setup": {
+        "drawer": "closed",
+        "sliding_door": "left",
+        "switch": "off",
+        "green_light": "off",
+        "blocks": {
+            "red": "hidden",
+            "blue": "hidden",
+            "pink": "hidden"
+        }
+    },
+    "reset_poses": "calvin_exp_configs_examples/reset_poses/initial_calvin_robot_states_right_side_midpoint.json",
+    "max": 12,
+    "steps": [
+        {
+            "name": "open_drawer",
+            "poses": "articulated/drawer_open",
+            "contrast_poses": "articulated/drawer_close",
+            "scale": 1,
+            "alpha": 40,
+            "avoid_behaviors": [
+                "button_on",
+                "button_off"
+            ]
+        },
+        {
+            "name": "button_on",
+            "poses": "articulated/button_on",
+            "scale": 1,
+            "alpha": 30
+        }
+    ]
+}

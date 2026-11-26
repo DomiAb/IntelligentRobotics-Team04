@@ -42,6 +42,8 @@ def config_blocks(config):
         for number, step in enumerate(config["goal_sequence"]):
             name = step.get("name", f"step_{number}")
             blocks.append((f"step {number + 1} {name}: goal conditions, scale {step.get('scale')}, alpha {step.get('alpha')}", step.get("pos_examples")))
+            if step.get("home") is not None:
+                blocks.append((f"step {number + 1} {name}: home phase, first {step['home'].get('steps')} env steps", step["home"]["examples"]))
             for key in SWITCH_KEYS:
                 if step.get("switch", dict()).get(key) is not None:
                     blocks.append((f"step {number + 1} {name}: switch {key}", step["switch"][key]))

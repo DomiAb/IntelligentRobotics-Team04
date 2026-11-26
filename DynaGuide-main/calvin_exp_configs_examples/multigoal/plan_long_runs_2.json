@@ -1,0 +1,64 @@
+{
+    "description": "Long runs, part 2 of 2: door_drawer and button_grip in random scenes, 5 x 100 guided rollouts each (seeds 0 to 4) and 100 of the base policy (seed 0), up to 800 steps, no video. The goal switch is the default (patches, margin 0.6). Run with dynaguide_scripts/run_long_runs_2.bat",
+    "n_rollouts": 100,
+    "horizon": 800,
+    "scale": 1,
+    "ss": 4,
+    "alpha": 30,
+    "base_policy": false,
+    "keep_images": false,
+    "video": false,
+    "video_skip": 4,
+    "experiments": {
+        "door_drawer_seed0": {
+            "config": "datasets/guidance_conditions/long_door_drawer/experiment.json",
+            "seed": 400,
+            "base_policy": true
+        },
+        "door_drawer_seed1": {
+            "config": "datasets/guidance_conditions/long_door_drawer/experiment.json",
+            "seed": 401,
+            "base_policy": false
+        },
+        "door_drawer_seed2": {
+            "config": "datasets/guidance_conditions/long_door_drawer/experiment.json",
+            "seed": 402,
+            "base_policy": false
+        },
+        "door_drawer_seed3": {
+            "config": "datasets/guidance_conditions/long_door_drawer/experiment.json",
+            "seed": 403,
+            "base_policy": false
+        },
+        "door_drawer_seed4": {
+            "config": "datasets/guidance_conditions/long_door_drawer/experiment.json",
+            "seed": 404,
+            "base_policy": false
+        },
+        "button_grip_seed0": {
+            "config": "datasets/guidance_conditions/long_button_grip/experiment.json",
+            "seed": 500,
+            "base_policy": true
+        },
+        "button_grip_seed1": {
+            "config": "datasets/guidance_conditions/long_button_grip/experiment.json",
+            "seed": 501,
+            "base_policy": false
+        },
+        "button_grip_seed2": {
+            "config": "datasets/guidance_conditions/long_button_grip/experiment.json",
+            "seed": 502,
+            "base_policy": false
+        },
+        "button_grip_seed3": {
+            "config": "datasets/guidance_conditions/long_button_grip/experiment.json",
+            "seed": 503,
+            "base_policy": false
+        },
+        "button_grip_seed4": {
+            "config": "datasets/guidance_conditions/long_button_grip/experiment.json",
+            "seed": 504,
+            "base_policy": false
+        }
+    }
+}

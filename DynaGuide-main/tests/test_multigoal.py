@@ -247,6 +247,34 @@ def test_peak_switch():
     assert not guidance.observe(fake_obs(250), 7)  # the last step never switches, the env ends the episode
 
 
+def test_home_phase():
+    """A step with a home phase guides towards its home examples first, doesn't check the switch then, and asks to plan again after."""
+    oracle = {**SWITCH_DEFAULTS, "mode" : "oracle", "delay" : 0}
+    guidance = fake_guidance([oracle, oracle], [None] * 2, [None] * 2)
+    guidance.steps[1].home = (lambda s, a: torch.full((1,), 9.0), "home embeddings", 3)
+    guidance.reset()
+    assert not guidance.homing and float(guidance(None, None)) == 0
+    assert guidance.observe(fake_obs(0), 5, oracle_steps_completed = 1) and guidance.homing # step 2 starts with its home phase
+    assert float(guidance(None, None)) == 9 and guidance.good_embeddings == "home embeddings"
+    assert not guidance.observe(fake_obs(0), 7) and guidance.homing and not guidance.replan_now
+    guidance.observe(fake_obs(0), 8)
+    assert not guidance.homing and guidance.replan_now and float(guidance(None, None)) == 1
+    guidance.observe(fake_obs(0), 9)
+    assert not guidance.replan_now
+
+
+def test_home_phase_holds_the_switch():
+    switch = {**SWITCH_DEFAULTS, "patience" : 1, "min_steps" : 0, "margin" : 30, "tolerance" : 5}
+    guidance = fake_guidance([switch, switch], [[100.0], [200.0]], [[0.0], [100.0]])
+    guidance.steps[0].home = (lambda s, a: torch.full((1,), 9.0), None, 4)
+    guidance.reset()
+    for t, value in enumerate([20, 70, 72], 1): # would be done by step 3 without the home phase
+        assert not guidance.observe(fake_obs(value), t)
+    assert guidance.trace == [] # no check during the phase
+    guidance.observe(fake_obs(72), 4)
+    assert len(guidance.trace) == 1 # checked again once the phase is over
+
+
 def test_peak_needs_a_crossing():
     """A step that looks done from the start isn't skipped: c must have been <= 0 during the step."""
     switch = {**SWITCH_DEFAULTS, "patience" : 2, "min_steps" : 0}
@@ -303,6 +331,17 @@ def test_done_looser_than_completed():
     start, state = np.zeros(24), np.zeros(24)
     start[3], state[3] = 0.088, 0.010 # the switch 89% of the way off: done now, not before
     assert "switch_off" in detect_behaviors(start, state, np.zeros(15))
+
+
+def test_start_share():
+    from core.calvin_behaviors import detect_behaviors, start_sides
+    assert start_sides(3, 0.01, 0.07) == (0.022, 0.066) # the switch: 25% of 0.088 either way
+    assert start_sides(1, 0.05, 0.10) == (0.05, 0.10) # the drawer: the authors' thresholds are already as loose
+    start, state, highest = np.zeros(24), np.zeros(24), np.zeros(24)
+    start[3], highest[3], state[3] = 0.07, 0.07, 0.005 # the switch was pushed 20% before the step
+    assert "switch_off" in detect_behaviors(start, state, np.zeros(15), start, highest)
+    start[3], highest[3] = 0.05, 0.05 # 43%: too far, it doesn't count
+    assert "switch_off" not in detect_behaviors(start, state, np.zeros(15), start, highest)
 
 
 def test_switch_settings():
