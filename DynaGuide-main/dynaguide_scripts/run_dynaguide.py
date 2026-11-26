@@ -405,6 +405,11 @@ def run_trained_agent(args):
     if args.exp_setup_config is not None: 
         with open(args.exp_setup_config, "r") as f:
             exp_setup_config = json.load(f)
+        try: # a picture of every condition of this run, conditions.png, see condition_overview.py. Only for looking at, never stops a run
+            from condition_overview import FILENAME, save_condition_overview
+            save_condition_overview(exp_setup_config, os.path.join(args.output_folder, FILENAME))
+        except Exception as error:
+            print(f"No {FILENAME if 'FILENAME' in dir() else 'conditions.png'}: {error}")
         multigoal = is_multigoal(exp_setup_config)
         if multigoal:
             validate_multigoal_config(exp_setup_config)
